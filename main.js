@@ -15,6 +15,7 @@ const modalRoot = $("#modal-root");
 
 const btnReset = $("#btn-reset");
 const btnFullscreen = $("#btn-fullscreen");
+const btnHelp = $("#btn-help");
 
 const DEFAULT_METERS = {
   sharedModelStability: 100,
@@ -98,6 +99,11 @@ btnReset.addEventListener("click", resetAll);
 btnFullscreen.addEventListener("click", () => toggleFullscreen());
 document.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") toggleFullscreen();
+});
+
+btnHelp?.addEventListener("click", () => showHelpModal());
+document.addEventListener("keydown", (e) => {
+  if (e.key === "?" || (e.shiftKey && e.key === "/")) showHelpModal();
 });
 
 function toggleFullscreen() {
@@ -187,18 +193,36 @@ function renderTitle() {
 
   const title = document.createElement("h2");
   title.className = "card__title";
-  title.textContent = "Enter the Arena";
+  title.textContent = "Enter the Arena (Solo)";
   wrap.appendChild(title);
 
   const desc = document.createElement("div");
   desc.className = "card__desc";
-  desc.textContent =
-    "You are the Leader. The only authority is the Shared Model Canvas. Stakeholders will interrupt. If you don’t tag your response to the model, it doesn’t count.";
+  desc.innerHTML =
+    "<strong>You are the Leader.</strong> Stakeholders interrupt on a script. Your job is to keep the Shared Model alive under pressure.<br/><br/><strong>Rule:</strong> if a response isn’t tagged to Shared Model fields, it doesn’t count.";
   wrap.appendChild(desc);
 
   const divider = document.createElement("div");
   divider.className = "divider";
   wrap.appendChild(divider);
+
+  const img = document.createElement("img");
+  img.className = "hero-img";
+  img.alt = "Cohort 9 Shared Model template graphic";
+  img.src = "./assets/cohort9_shared_model_template.svg";
+  wrap.appendChild(img);
+
+  const how = document.createElement("div");
+  how.className = "callout";
+  how.innerHTML =
+    "<strong>How to play (90 seconds):</strong><ol class='steps'>" +
+    "<li>Click <strong>Start</strong> to begin Round 1.</li>" +
+    "<li>Pick Mode A / B / C (Mode C is best, but stricter).</li>" +
+    "<li>Write your response <strong>and</strong> select Shared Model tag chips for each section.</li>" +
+    "<li>When interrupted, satisfy the new required tag before submitting.</li>" +
+    "<li>Submit → read the Debrief → next round.</li>" +
+    "</ol>";
+  wrap.appendChild(how);
 
   const row = document.createElement("div");
   row.className = "row";
@@ -242,7 +266,7 @@ function renderTitle() {
   const canvasBtn = document.createElement("button");
   canvasBtn.type = "button";
   canvasBtn.className = "btn btn--ghost";
-  canvasBtn.textContent = "Open Shared Model Canvas";
+  canvasBtn.textContent = "Open Shared Model Canvas (Reference)";
   canvasBtn.addEventListener("click", () => showSharedModelCanvasModal());
   actions.appendChild(canvasBtn);
 
@@ -408,6 +432,13 @@ function renderRound() {
   required.textContent = "Interrupt requirements: (none yet)";
   wrap.appendChild(required);
 
+  const guidance = document.createElement("div");
+  guidance.id = "round-guidance";
+  guidance.className = "callout";
+  guidance.innerHTML =
+    "<strong>Tip:</strong> Tags are the scoring system. Under pressure, the model disappears first—fight that drift.";
+  wrap.appendChild(guidance);
+
   const formRoot = document.createElement("div");
   formRoot.id = "form-root";
   wrap.appendChild(formRoot);
@@ -451,6 +482,43 @@ function renderRound() {
             .map((id) => fieldById(id)?.label || id)
             .join(" • ")}`
         : "Interrupt requirements: (none yet)";
+    }
+
+    const guidance = $("#round-guidance");
+    if (guidance) {
+      const allTags = uniq(
+        Object.values(state.round.tagsBySection || {})
+          .flat()
+          .filter(Boolean),
+      );
+      const unmetReq = reqTags.filter((t) => !new Set(allTags).has(t));
+
+      if (state.round.mode === MODES.C) {
+        const v = validateModeCResponse({
+          textBySection: state.round.textBySection,
+          tagsBySection: state.round.tagsBySection,
+        });
+        const checklist = v.ok
+          ? "<strong>Mode C checklist:</strong> All required tags + sections are satisfied. Submit when ready."
+          : `<strong>Mode C checklist:</strong> ${
+              v.violations.length ? v.violations[0].message : "Complete all sections + add at least one tag per section."
+            }`;
+        const reqLine = unmetReq.length
+          ? `<div class="card__desc" style="margin-top:6px"><strong>Interrupt tags missing:</strong> ${unmetReq
+              .map((t) => fieldById(t)?.label || t)
+              .join(", ")}</div>`
+          : "";
+        guidance.innerHTML = `${checklist}${reqLine}`;
+      } else if (state.round.mode) {
+        const tagCount = allTags.length;
+        const reqLine = unmetReq.length
+          ? ` Missing interrupt tag(s): ${unmetReq.map((t) => fieldById(t)?.label || t).join(", ")}.`
+          : "";
+        guidance.innerHTML = `<strong>Mode ${state.round.mode === MODES.A ? "A" : "B"} tip:</strong> Choose tags that anchor your message (aim for 2+). Tag count: ${tagCount}.${reqLine}`;
+      } else {
+        guidance.innerHTML =
+          "<strong>Tip:</strong> Tags are the scoring system. Under pressure, the model disappears first—fight that drift.";
+      }
     }
   };
 
@@ -927,6 +995,12 @@ function showSharedModelCanvasModal() {
   const body = document.createElement("div");
   body.className = "grid";
 
+  const img = document.createElement("img");
+  img.className = "hero-img";
+  img.alt = "Cohort 9 Shared Model template graphic";
+  img.src = "./assets/cohort9_shared_model_template.svg";
+  body.appendChild(img);
+
   const intro = document.createElement("div");
   intro.textContent =
     "This is the only authoritative source. If a response doesn’t reference a model element (via tags), it doesn’t count.";
@@ -949,6 +1023,36 @@ function showSharedModelCanvasModal() {
     title: "Shared Model Canvas (Reference)",
     body,
     buttons: [{ label: "Got it", variant: "btn--primary", onClick: closeModal }],
+  });
+}
+
+function showHelpModal() {
+  const body = document.createElement("div");
+  body.className = "grid";
+
+  const top = document.createElement("div");
+  top.innerHTML =
+    "<strong>Quick start</strong><ol class='steps'>" +
+    "<li><strong>Start</strong> a round.</li>" +
+    "<li>Pick a mode (A/B/C).</li>" +
+    "<li>Write + tag your response sections.</li>" +
+    "<li>Meet any required tags from interrupts.</li>" +
+    "<li>Submit and read the debrief.</li>" +
+    "</ol>";
+  body.appendChild(top);
+
+  const controls = document.createElement("div");
+  controls.className = "callout";
+  controls.innerHTML =
+    "<strong>Controls</strong><div class='card__desc' style='margin-top:6px'>" +
+    "1/2/3 = Mode A/B/C • Enter = Submit • F = Fullscreen • Esc = Close popups • ? = Help" +
+    "</div>";
+  body.appendChild(controls);
+
+  openModal({
+    title: "Help",
+    body,
+    buttons: [{ label: "Close", variant: "btn--primary", onClick: closeModal }],
   });
 }
 
@@ -1097,15 +1201,15 @@ function renderCanvas() {
 
   // Background frame
   const g = ctx.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, "rgba(255, 176, 32, 0.10)");
-  g.addColorStop(1, "rgba(29, 226, 198, 0.10)");
+  g.addColorStop(0, "rgba(255, 176, 32, 0.085)");
+  g.addColorStop(1, "rgba(29, 226, 198, 0.085)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
   // Header
   ctx.fillStyle = "rgba(255,255,255,0.9)";
   ctx.font = "900 26px Fraunces";
-  ctx.fillText(state.screen === "round" ? "Arena: Under Pressure" : "Systems Control Room", 28, 44);
+  ctx.fillText("Shared Model Under Pressure", 28, 44);
 
   // Meters
   const meters = state.meters;
@@ -1113,28 +1217,18 @@ function renderCanvas() {
   const meterX = 28;
   const meterW = w - 56;
   drawMeterRow(meterX, meterY, meterW, meters);
+  const metersHeight = 5 * 14 + 4 * 12;
+  const statusBaseY = meterY + metersHeight + 30;
 
   // Vision Jenga / Coherence Tower
-  drawCoherenceTower(w - 240, 170, 190, 420, meters.sharedModelStability);
+  drawCoherenceTower(w - 240, 240, 190, 400, meters.sharedModelStability);
 
-  // Scene / status
-  ctx.font = "650 14px Instrument Sans";
+  // Status strip (avoid overlapping the bars)
+  ctx.font = "650 13px Instrument Sans";
   ctx.fillStyle = "rgba(255,255,255,0.82)";
-  const sceneLabel =
-    state.screen === "round" && state.round
-      ? state.round.scene.title
-      : state.lastRoundSummary
-        ? state.lastRoundSummary.sceneTitle
-        : "Awaiting start…";
   const status =
-    state.screen === "round"
-      ? "LIVE"
-      : state.screen === "debrief"
-        ? "DEBRIEF"
-        : state.screen === "end"
-          ? "META"
-          : "READY";
-  ctx.fillText(`Scene: ${sceneLabel}  •  Status: ${status}`, 28, 152);
+    state.screen === "round" ? "LIVE" : state.screen === "debrief" ? "DEBRIEF" : state.screen === "end" ? "META" : "READY";
+  ctx.fillText(`Status: ${status}`, 28, statusBaseY);
 
   const hint =
     state.screen === "round"
@@ -1143,8 +1237,9 @@ function renderCanvas() {
   stageHint.textContent = hint;
 
   if (state.screen === "round" && state.round) {
-    const secondsPassed = state.round.secondsTotal - state.round.secondsLeft;
-    ctx.fillText(`Time passed: ${secondsPassed.toFixed(0)}s`, 28, 176);
+    const sceneLabel = state.round.scene.title;
+    ctx.fillText(`Scene: ${sceneLabel}`, 28, statusBaseY + 24);
+    ctx.fillText(`Time: ${formatTimer(state.round.secondsLeft)} remaining`, 28, statusBaseY + 46);
 
     const reqTags = Array.from(state.round.requiredTags);
     if (reqTags.length) {
@@ -1152,18 +1247,18 @@ function renderCanvas() {
       ctx.fillText(
         `Required tags: ${reqTags.map((t) => fieldById(t)?.label || t).join(" • ")}`,
         28,
-        200,
+        statusBaseY + 70,
       );
     }
   }
 
   if (state.screen === "debrief" && state.lastRoundSummary) {
     ctx.fillStyle = "rgba(255,255,255,0.82)";
-    ctx.fillText(`Last mode: ${MODE_LABEL[state.lastRoundSummary.mode]}`, 28, 176);
+    ctx.fillText(`Last mode: ${MODE_LABEL[state.lastRoundSummary.mode]}`, 28, statusBaseY + 24);
     ctx.fillText(
       `Tag coverage: ${state.lastRoundSummary.tagCoverage} • Tactical patches so far: ${state.tacticalCount}`,
       28,
-      200,
+      statusBaseY + 46,
     );
   }
 }
@@ -1211,7 +1306,7 @@ function drawCoherenceTower(x, y, w, h, stability) {
 
   ctx.fillStyle = "rgba(255,255,255,0.9)";
   ctx.font = "900 18px Fraunces";
-  ctx.fillText("Strategic Coherence", 0, -18);
+  ctx.fillText("Strategic Coherence", 0, -14);
 
   for (let i = 0; i < blocks; i++) {
     const yy = h - (i + 1) * (blockH + 6);

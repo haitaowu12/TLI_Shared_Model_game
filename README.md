@@ -2,6 +2,10 @@
 
 Static GitHub Pages site for **Shared Model Under Pressure** (INCOSE TLI Cohort 9).
 
+## Cohort 9 Shared Model (reference)
+
+![Cohort 9 Shared Model Template](assets/cohort9_shared_model_template.svg)
+
 ## Play
 
 - GitHub Pages: `https://haitaowu12.github.io/TLI_Shared_Model_game/`
@@ -36,6 +40,7 @@ This is a serious game about holding a **Shared Model** under delivery pressure.
 - `Enter`: Submit
 - `F`: Fullscreen
 - `Esc`: Close popups
+- `?`: Help
 - **Shared Model Canvas** button: opens the authoritative one-page reference
 
 ## Scoring (high level)

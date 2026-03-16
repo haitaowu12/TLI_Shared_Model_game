@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shared Model Under Pressure</title>
+    <meta
+      name="description"
+      content="A serious game for practicing Shared Model thinking under delivery pressure."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true"></div>
+          <div class="brand__text">
+            <div class="brand__title">Shared Model Under Pressure</div>
+            <div class="brand__subtitle">Leader in the Arena — Cohort 9 Shared Model</div>
+          </div>
+        </div>
+        <div class="topbar__actions">
+          <button id="btn-fullscreen" class="btn btn--ghost" type="button">
+            Fullscreen (F)
+          </button>
+          <button id="btn-reset" class="btn btn--ghost" type="button">Reset</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="stage" aria-label="Game stage">
+          <canvas id="game-canvas" width="960" height="640"></canvas>
+          <div class="stage__hint" id="stage-hint" aria-live="polite"></div>
+        </section>
+
+        <aside class="panel" aria-label="Game panel">
+          <div id="screen-root"></div>
+          <footer class="panel__footer">
+            <div class="kbd">
+              <span class="kbd__key">1</span> Mode A
+              <span class="kbd__key">2</span> Mode B
+              <span class="kbd__key">3</span> Mode C
+              <span class="kbd__key">Enter</span> Submit
+              <span class="kbd__key">Esc</span> Close
+            </div>
+          </footer>
+        </aside>
+      </main>
+    </div>
+
+    <div id="modal-root" class="modal-root" hidden></div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
+

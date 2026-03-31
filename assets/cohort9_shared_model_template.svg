@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <defs>
+    <style>
+      .bg { fill: #fff7e3; }
+      .stroke { stroke: #0b0f14; stroke-width: 4; }
+      .substroke { stroke: rgba(11,15,20,0.55); stroke-width: 2; }
+      .title { font: 800 40px "Fraunces", Georgia, serif; fill: #0b0f14; }
+      .k { font: 800 18px "Instrument Sans", system-ui, sans-serif; fill: #0b0f14; letter-spacing: .2px; }
+      .p { font: 550 14px "Instrument Sans", system-ui, sans-serif; fill: rgba(11,15,20,0.85); }
+      .cap { font: 650 12px "Instrument Sans", system-ui, sans-serif; fill: rgba(11,15,20,0.75); }
+      .chip { fill: #ffd27a; }
+      .chip2 { fill: #b9fff2; }
+      .chip3 { fill: #ffd9c8; }
+      .chip4 { fill: #e7ffb0; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="900" class="bg"/>
+  <rect x="40" y="40" width="1320" height="820" rx="26" class="stroke" fill="none"/>
+
+  <text x="70" y="98" class="title">Shared Model (Cohort 9 Template)</text>
+  <text x="70" y="128" class="cap">If it’s not referenced, it doesn’t count. Use these fields to anchor decisions under pressure.</text>
+
+  <!-- Border influences -->
+  <g>
+    <!-- Top -->
+    <rect x="70" y="160" width="880" height="110" rx="18" class="stroke" fill="#ffffff"/>
+    <rect x="970" y="160" width="360" height="110" rx="18" class="stroke" fill="#ffffff"/>
+
+    <circle cx="95" cy="188" r="8" class="chip"/>
+    <text x="112" y="194" class="k">Vision</text>
+    <text x="112" y="216" class="p">What’s the big picture?</text>
+
+    <circle cx="995" cy="188" r="8" class="chip2"/>
+    <text x="1012" y="194" class="k">Scope</text>
+    <text x="1012" y="216" class="p">What are we talking about?</text>
+
+    <!-- Sides -->
+    <rect x="70" y="290" width="360" height="230" rx="18" class="stroke" fill="#ffffff"/>
+    <rect x="970" y="290" width="360" height="230" rx="18" class="stroke" fill="#ffffff"/>
+
+    <circle cx="95" cy="318" r="8" class="chip3"/>
+    <text x="112" y="324" class="k">Internal Stakeholder Context</text>
+    <text x="112" y="346" class="p">Who do we need to take into consideration?</text>
+
+    <circle cx="995" cy="318" r="8" class="chip3"/>
+    <text x="1012" y="324" class="k">External Stakeholder Context</text>
+    <text x="1012" y="346" class="p">Who do we need to take into consideration?</text>
+
+    <!-- Bottom -->
+    <rect x="70" y="770" width="530" height="70" rx="18" class="stroke" fill="#ffffff"/>
+    <rect x="620" y="770" width="450" height="70" rx="18" class="stroke" fill="#ffffff"/>
+    <rect x="1090" y="770" width="240" height="70" rx="18" class="stroke" fill="#ffffff"/>
+
+    <circle cx="95" cy="795" r="8" class="chip4"/>
+    <text x="112" y="801" class="k">Logistical Constraints</text>
+    <text x="112" y="822" class="p">Budget, time, time zones</text>
+
+    <circle cx="645" cy="795" r="8" class="chip4"/>
+    <text x="662" y="801" class="k">Resources / Knowledge Management</text>
+    <text x="662" y="822" class="p">Tools, return-of-experience capture</text>
+
+    <circle cx="1115" cy="795" r="8" class="chip4"/>
+    <text x="1132" y="801" class="k">Tools &amp; Processes</text>
+    <text x="1132" y="822" class="p">How do we work?</text>
+  </g>
+
+  <!-- Center: project description -->
+  <g>
+    <rect x="450" y="290" width="500" height="470" rx="22" class="stroke" fill="#ffffff"/>
+    <text x="470" y="324" class="k">Project Description (Center)</text>
+    <text x="470" y="346" class="p">These fields are the “working core” you must keep alive under pressure.</text>
+
+    <!-- inner grid -->
+    <rect x="470" y="368" width="460" height="96" rx="16" class="substroke" fill="#fffdf7"/>
+    <text x="488" y="396" class="k">Rationale</text>
+    <text x="488" y="418" class="p">Why are we talking about this?</text>
+
+    <rect x="470" y="474" width="460" height="96" rx="16" class="substroke" fill="#fffdf7"/>
+    <text x="488" y="502" class="k">As-is State</text>
+    <text x="488" y="524" class="p">What do we have right now?</text>
+
+    <rect x="470" y="580" width="460" height="96" rx="16" class="substroke" fill="#fffdf7"/>
+    <text x="488" y="608" class="k">Strategy</text>
+    <text x="488" y="630" class="p">How are we going to achieve the vision?</text>
+
+    <rect x="470" y="686" width="225" height="64" rx="16" class="substroke" fill="#fffdf7"/>
+    <text x="488" y="712" class="k">Team Governance</text>
+    <text x="488" y="732" class="p">How are we working together?</text>
+
+    <rect x="705" y="686" width="225" height="64" rx="16" class="substroke" fill="#fffdf7"/>
+    <text x="723" y="712" class="k">Key Performance Indicators</text>
+    <text x="723" y="732" class="p">How do we measure progress?</text>
+  </g>
+
+  <!-- Accountability strip -->
+  <g>
+    <rect x="70" y="540" width="360" height="210" rx="18" class="stroke" fill="#ffffff"/>
+    <circle cx="95" cy="568" r="8" class="chip2"/>
+    <text x="112" y="574" class="k">Success Criteria</text>
+    <text x="112" y="596" class="p">How do we know we’ve succeeded?</text>
+
+    <rect x="92" y="612" width="316" height="56" rx="14" class="substroke" fill="#fffdf7"/>
+    <text x="110" y="645" class="k">Project Manager</text>
+
+    <rect x="92" y="676" width="152" height="60" rx="14" class="substroke" fill="#fffdf7"/>
+    <text x="110" y="710" class="k">Responsible</text>
+
+    <rect x="256" y="676" width="152" height="60" rx="14" class="substroke" fill="#fffdf7"/>
+    <text x="274" y="710" class="k">Accountable</text>
+  </g>
+
+  <g>
+    <rect x="970" y="540" width="360" height="210" rx="18" class="stroke" fill="#ffffff"/>
+    <circle cx="995" cy="568" r="8" class="chip"/>
+    <text x="1012" y="574" class="k">Team</text>
+    <text x="1012" y="596" class="p">Who is participating in the shared model?</text>
+    <text x="1012" y="626" class="cap">Tip: keep names/roles explicit, not implied.</text>
+  </g>
+</svg>
+

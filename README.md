@@ -1,6 +1,3 @@
----
-domain: systems-engineering
----
 # Shared Model Under Pressure (INCOSE TLI Cohort 10)
 
 A public, dependency-free browser game (static HTML/CSS/JS) designed to train **Shared Model** usage under delivery pressure.
@@ -8,6 +5,7 @@ A public, dependency-free browser game (static HTML/CSS/JS) designed to train **
 ## 🎮 What's New in Cohort 10
 
 ### Visual & UX Enhancements
+
 - **Modern Dark OLED Luxury Design**: Contemporary visual design with refined amber/teal color palette
 - **Responsive Layout**: Works seamlessly across desktop, laptop, tablet, and mobile devices
 - **Full-Screen Mode**: Enhanced gameplay with F or F11 key shortcuts
@@ -15,6 +13,7 @@ A public, dependency-free browser game (static HTML/CSS/JS) designed to train **
 - **Previous Round Indicators**: Light markers on meters show previous round values for comparison
 
 ### Gameplay Improvements
+
 - **Training Mode**: 5-step progressive tutorial for new players
 - **Random Interrupt Timing**: Interrupts now occur at randomized times (±10s windows) for increased replayability
 - **Pre-Selected Tags**: Interrupts suggest relevant tags based on stakeholder DiSC type
@@ -23,6 +22,7 @@ A public, dependency-free browser game (static HTML/CSS/JS) designed to train **
 - **Expert Difficulty**: New "Expert – Chaos" mode (90s timer, extra interrupts, no pauses)
 
 ### Content Enhancements
+
 - **Rich Stakeholder Backgrounds**: Detailed professional backgrounds, motivations, and system roles
 - **Enhanced Debrief**: Shows user-entered text with tag feedback
 - **Specific Success Criteria**: Measurable KPIs with baseline and target values
@@ -39,6 +39,7 @@ Then open `http://localhost:5173`.
 ## 🎯 How to Play
 
 ### Quick Start
+
 1. Click **Start** or **Training Mode** (recommended for first-time players)
 2. Choose difficulty: Training (150s), Standard (120s), Hardcore (105s), or Expert (90s)
 3. Select response mode: A (tactical), B (strategic pause), or C (model reframe)
@@ -47,11 +48,13 @@ Then open `http://localhost:5173`.
 6. Review debrief for feedback and meter changes
 
 ### Response Modes
+
 - **Mode A - Tactical Patch**: Quick response, lower score, tactical drift risk
 - **Mode B - Strategic Pause**: Balanced approach, moderate score
 - **Mode C - Model Reframe**: Comprehensive response, highest score, requires all sections
 
 ### Keyboard Shortcuts
+
 | Key | Action |
 |-----|--------|
 | `1` / `2` / `3` | Select Mode A / B / C |
@@ -65,6 +68,7 @@ Then open `http://localhost:5173`.
 ## 🎓 Training Mode
 
 New players should start with Training Mode, which provides:
+
 1. **Understanding the Shared Model Canvas**: Overview of key fields
 2. **Selecting Response Modes**: Learn when to use A, B, or C
 3. **Tagging Responses**: Practice connecting responses to model fields
@@ -76,6 +80,7 @@ Training completion is saved locally and won't auto-launch on subsequent visits.
 ## 📊 Game Mechanics
 
 ### Meters
+
 - **Shared Model Stability**: Overall model coherence (0-100)
 - **Vision Integrity**: Alignment with long-term purpose (0-100)
 - **Stakeholder Confidence**: Trust and buy-in (0-100)
@@ -83,28 +88,34 @@ Training completion is saved locally and won't auto-launch on subsequent visits.
 - **Burn Rate**: Resource consumption rate (0-100, lower is better)
 
 ### Stakeholders
+
 Four stakeholder personas with DiSC profiles:
+
 - **Morgan (D)**: Operations Lead - Values action, accountability, strategy
 - **Ravi (i)**: Public Trust & Comms - Values vision, narrative, stakeholder alignment
 - **Aisha (S)**: Safety & Training - Values team governance, safety, alignment
 - **Elena (C)**: Finance & Compliance - Values KPIs, constraints, lifecycle impact
 
 ### Consequences
+
 - **Rework Cascade**: Triggers after 3 Mode A selections - cascading defects, stakeholder fragmentation
 
 ## 🌐 Deploy to GitHub Pages
 
 Simplest:
+
 - Create a new repo (e.g. `incose-tli-shared-model-game`).
 - Copy **the contents of** `site/` into the repo root.
 - In GitHub → Settings → Pages → Source: "Deploy from a branch" → Branch: `main` → Folder: `/ (root)`.
 
 Alternative:
+
 - Keep the site in a `/docs` folder and publish `/docs`.
 
 ## 🧪 Testing
 
 ### Automated Tests
+
 ```bash
 # Run unit tests
 node --test tests/
@@ -117,6 +128,7 @@ open http://localhost:5173?training=1
 ```
 
 ### Manual Testing Checklist
+
 - [ ] All difficulty levels selectable and functional
 - [ ] Training mode completes successfully
 - [ ] Interrupts trigger at randomized times
@@ -130,12 +142,14 @@ open http://localhost:5173?training=1
 ## 🎨 Design System
 
 ### Color Palette
+
 - **Primary Amber**: `#ffb700` - Actions, highlights
 - **Primary Teal**: `#00d4aa` - Success, selected states
 - **Danger Rose**: `#ff4d6d` - Warnings, critical states
 - **Background**: `#000000` to `#0a0a0f` - OLED-optimized dark theme
 
 ### Typography
+
 - **Display**: Fraunces (serif) - Headlines, titles
 - **Body**: Instrument Sans - UI text, descriptions
 

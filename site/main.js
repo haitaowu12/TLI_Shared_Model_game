@@ -2,8 +2,21 @@ import { SHARED_MODEL_FIELDS, fieldById } from "./data/sharedModel.js";
 import { SCENES } from "./data/scenes.js";
 import { stakeholderById } from "./data/stakeholders.js";
 import { CONSEQUENCES } from "./data/consequences.js";
-import { MODES, MODE_LABEL, validateModeCResponse, computeRoundDeltas, applyDeltas } from "./lib/scoring.js";
+import { MODES, MODE_LABEL, MODE_C_SECTIONS, validateModeCResponse, computeRoundDeltas, applyDeltas } from "./lib/scoring.js";
 import { clamp, nowIso, pick, uniq } from "./lib/utils.js";
+import { TransitionManager } from "./lib/transitions.js";
+import { AudioManager } from "./lib/audio.js";
+import { AdaptiveDifficulty } from "./lib/adaptive.js";
+import {
+  saveGameState,
+  loadGameState,
+  clearGameState,
+  saveHighScore,
+  loadHighScores,
+  saveSessionStats,
+  loadSessionStats,
+  calculateFinalScore,
+} from "./lib/persistence.js";
 import {
   TRAINING_STEPS,
   TRAINING_SCENE,
@@ -14,7 +27,14 @@ import {
   saveTrainingStep,
 } from "./data/training.js";
 
+const audioManager = new AudioManager();
+const adaptiveDifficulty = new AdaptiveDifficulty();
+
 const $ = (sel) => document.querySelector(sel);
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 const canvas = $("#game-canvas");
 const ctx = canvas.getContext("2d");
@@ -27,6 +47,7 @@ const btnFullscreen = $("#btn-fullscreen");
 const btnHelp = $("#btn-help");
 const btnCanvas = $("#btn-canvas");
 const btnGlossary = $("#btn-glossary");
+const btnAudio = $("#btn-audio");
 
 const DEFAULT_METERS = {
   sharedModelStability: 100,
@@ -93,6 +114,7 @@ function makeFreshState() {
     difficulty: "standard",
     roundIndex: 0,
     meters: { ...DEFAULT_METERS },
+    displayMeters: { ...DEFAULT_METERS },
     previousMeters: { ...DEFAULT_METERS },
     tacticalCount: 0,
     persistentMods: {},
@@ -100,9 +122,9 @@ function makeFreshState() {
     lastRoundSummary: null,
     tagsUsedCounts: Object.fromEntries(SHARED_MODEL_FIELDS.map((f) => [f.id, 0])),
     driftTimeline: [],
+    decisionFingerprint: { modeACount: 0, visionTagUsed: 0, totalRoundsPlayed: 0, modeCSuccessCount: 0, tagCoverageHistory: [] },
     round: null,
     ui: { update: () => {} },
-    // Training mode state
     trainingMode: false,
     trainingStep: 0,
     trainingCompleted: isTrainingCompleted(),
@@ -111,12 +133,53 @@ function makeFreshState() {
 
 function resetAll() {
   closeModal();
+  clearGameState();
+  adaptiveDifficulty.reset();
   state = makeFreshState();
   setScreen("title");
   stageHint.textContent = "Tip: Use the Shared Model tags. If it’s not tagged, it doesn’t count.";
 }
 
-btnReset.addEventListener("click", resetAll);
+btnReset.addEventListener("click", () => {
+  if (state.screen !== "title") {
+    openModal({
+      title: "Reset Game?",
+      body: "All progress will be lost. Are you sure?",
+      buttons: [
+        { label: "Cancel", variant: "btn--ghost", onClick: closeModal },
+        { label: "Reset", variant: "btn--danger", onClick: resetAll },
+      ],
+    });
+  } else {
+    resetAll();
+  }
+});
+
+window.addEventListener("beforeunload", () => {
+  if (state.screen === "round" || state.screen === "debrief") {
+    saveGameState(state);
+  }
+});
+
+function updateAudioButton() {
+  if (!btnAudio) return;
+  const icon = btnAudio.querySelector(".audio-icon");
+  if (icon) icon.textContent = audioManager.isMuted() ? "🔇" : "🔊";
+}
+
+if (btnAudio) {
+  btnAudio.addEventListener("click", () => {
+    audioManager.init();
+    audioManager.toggleMute();
+    updateAudioButton();
+  });
+  updateAudioButton();
+}
+
+document.addEventListener("click", function initOnce() {
+  audioManager.init();
+  document.removeEventListener("click", initOnce);
+}, { once: true });
 
 btnFullscreen.addEventListener("click", () => toggleFullscreen());
 document.addEventListener("keydown", (e) => {
@@ -155,6 +218,21 @@ function handleFullscreenResize() {
 btnCanvas?.addEventListener("click", () => showSharedModelCanvasModal());
 btnGlossary?.addEventListener("click", () => showGlossaryModal());
 btnHelp?.addEventListener("click", () => showHelpModal());
+
+const btnCbMode = $("#btn-cb-mode");
+if (btnCbMode) {
+  const savedCbMode = localStorage.getItem("sharedModelGame_cbMode") === "true";
+  if (savedCbMode) {
+    document.body.classList.add("cb-safe");
+    btnCbMode.setAttribute("aria-pressed", "true");
+  }
+  btnCbMode.addEventListener("click", () => {
+    document.body.classList.toggle("cb-safe");
+    const isActive = document.body.classList.contains("cb-safe");
+    btnCbMode.setAttribute("aria-pressed", String(isActive));
+    localStorage.setItem("sharedModelGame_cbMode", String(isActive));
+  });
+}
 document.addEventListener("keydown", (e) => {
   if (e.key === "?" || (e.shiftKey && e.key === "/")) showHelpModal();
   if (e.altKey && (e.key === "c" || e.key === "C")) {
@@ -260,16 +338,64 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---------- Screens ----------
-function setScreen(next) {
+const transitionManager = new TransitionManager({ duration: 300 });
+let _transitionId = 0;
+
+function getTransitionType(from, to) {
+  if (to === "title") return "reset";
+  if (from === "title" && to === "briefing") return "forward";
+  if (from === "briefing" && to === "round") return "forward";
+  if (from === "round" && to === "debrief") return "submit";
+  if (from === "debrief" && to === "briefing") return "forward";
+  if (from === "debrief" && to === "end") return "submit";
+  return "forward";
+}
+
+async function setScreen(next) {
+  const myId = ++_transitionId;
+  const previousScreen = state.screen;
+  const transitionType = getTransitionType(previousScreen, next);
+  const oldContent = screenRoot.firstChild;
+
+  screenRoot.classList.add("screen-transition-container");
+
+  if (oldContent) {
+    oldContent.classList.add("screen-exit-overlay");
+    await transitionManager.exit(oldContent, transitionType);
+    if (_transitionId !== myId) return;
+  }
+
   state.screen = next;
+  if (state._undoCleanup) {
+    state._undoCleanup();
+    state._undoCleanup = null;
+  }
   screenRoot.innerHTML = "";
+
   if (next === "title") renderTitle();
   else if (next === "briefing") renderBriefing();
   else if (next === "round") renderRound();
   else if (next === "debrief") renderDebrief();
   else if (next === "end") renderEnd();
   else renderTitle();
+
+  const newContent = screenRoot.firstChild;
+
+  if (newContent) {
+    await transitionManager.enter(newContent, transitionType);
+    if (_transitionId !== myId) return;
+  }
+
+  screenRoot.classList.remove("screen-transition-container");
   renderCanvas();
+
+  screenRoot.setAttribute("tabindex", "-1");
+  const focusable = screenRoot.querySelector("button, textarea, [tabindex='0']");
+  if (focusable) {
+    focusable.focus();
+  } else {
+    screenRoot.focus();
+  }
 }
 
 function renderTitle() {
@@ -346,6 +472,32 @@ function renderTitle() {
   const actions = document.createElement("div");
   actions.className = "row";
 
+  const saved = loadGameState();
+  if (saved) {
+    const resume = document.createElement("button");
+    resume.type = "button";
+    resume.className = "btn btn--ghost";
+    resume.textContent = "Resume Game";
+    resume.addEventListener("click", () => {
+      const s = loadGameState();
+      if (!s) return;
+      state.screen = s.screen;
+      state.difficulty = s.difficulty;
+      state.roundIndex = s.roundIndex;
+      state.meters = { ...s.meters };
+      state.displayMeters = { ...s.meters };
+      state.previousMeters = { ...s.previousMeters };
+      state.tacticalCount = s.tacticalCount;
+      state.persistentMods = { ...(s.persistentMods || {}) };
+      state.tagsUsedCounts = { ...(s.tagsUsedCounts || {}) };
+      state.driftTimeline = [...(s.driftTimeline || [])];
+      state.lastRoundSummary = s.lastRoundSummary ? { ...s.lastRoundSummary } : null;
+      state.trainingCompleted = !!s.trainingCompleted;
+      setScreen("briefing");
+    });
+    actions.appendChild(resume);
+  }
+
   const start = document.createElement("button");
   start.id = "start-btn";
   start.type = "button";
@@ -407,6 +559,27 @@ function renderTitle() {
 
   trainingSection.appendChild(trainingRow);
   wrap.appendChild(trainingSection);
+
+  const highScores = loadHighScores();
+  const diffScores = highScores[state.difficulty] || [];
+  if (diffScores.length > 0) {
+    const divider4 = document.createElement("div");
+    divider4.className = "divider";
+    wrap.appendChild(divider4);
+
+    const hsTitle = document.createElement("div");
+    hsTitle.className = "card__desc";
+    hsTitle.innerHTML = "<strong>High Scores (" + (DIFFICULTY[state.difficulty]?.label || state.difficulty) + "):</strong>";
+    wrap.appendChild(hsTitle);
+
+    const hsList = document.createElement("div");
+    hsList.className = "grid";
+    const ordinals = ["1st", "2nd", "3rd", "4th", "5th"];
+    diffScores.forEach((entry, i) => {
+      hsList.appendChild(metricLine(ordinals[i], entry.score + " pts (" + entry.date + ")"));
+    });
+    wrap.appendChild(hsList);
+  }
 
   screenRoot.appendChild(wrap);
 
@@ -498,12 +671,83 @@ function renderBriefing() {
   state.ui.update = () => {};
 }
 
+function getSceneModifiers(scene, fingerprint) {
+  const mods = { extraConstraint: null, extraInjection: null, modifiedSetup: null, modelMomentum: false };
+
+  if (fingerprint.modeACount >= 3) {
+    mods.extraConstraint = "⚠ Accumulated tactical debt from previous Mode A responses is increasing system fragility.";
+    mods.extraInjection = {
+      at_s: 45,
+      window: 10,
+      from: pick(scene.stakeholders, 0),
+      line: "Previous tactical patches are compounding. The system can't absorb more shortcuts.",
+    };
+  }
+
+  if (fingerprint.totalRoundsPlayed > 0 && fingerprint.visionTagUsed < fingerprint.totalRoundsPlayed * 0.3) {
+    mods.modifiedSetup = scene.setup + " The team is losing sight of the original purpose — organizational drift is setting in.";
+    mods.extraInjection = {
+      at_s: 50,
+      window: 10,
+      from: "comms_i",
+      line: "Nobody's talking about the vision anymore. Are we still building what we set out to build?",
+    };
+  }
+
+  const avgCoverage = fingerprint.tagCoverageHistory.length > 0
+    ? fingerprint.tagCoverageHistory.reduce((a, b) => a + b, 0) / fingerprint.tagCoverageHistory.length
+    : 0;
+  if (avgCoverage > 80 && fingerprint.modeCSuccessCount >= 2) {
+    mods.modelMomentum = true;
+  }
+
+  return mods;
+}
+
+function showMomentumIndicator() {
+  const el = $("#pressure-indicator");
+  if (!el) return;
+  el.className = "pressure-indicator pressure-indicator--momentum";
+  el.textContent = "Model Momentum ✓";
+  el.hidden = false;
+  el.setAttribute("aria-hidden", "false");
+  setTimeout(() => {
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+    el.className = "pressure-indicator";
+  }, 2000);
+}
+
+function showPressureIndicator(direction) {
+  const el = $("#pressure-indicator");
+  if (!el) return;
+  el.className = `pressure-indicator pressure-indicator--${direction}`;
+  el.textContent = direction === "up" ? "Pressure ↑" : "Pressure ↓";
+  el.hidden = false;
+  el.setAttribute("aria-hidden", "false");
+  setTimeout(() => {
+    el.hidden = true;
+    el.setAttribute("aria-hidden", "true");
+    el.className = "pressure-indicator";
+  }, 3000);
+}
+
 function beginRound() {
+  audioManager.playRoundStart();
+  lastAnnouncedMilestone = null;
   const diff = DIFFICULTY[state.difficulty] || DIFFICULTY.standard;
-  const scene = SCENES[state.roundIndex];
+  const scene = { ...SCENES[state.roundIndex], constraints: [...SCENES[state.roundIndex].constraints], injections: [...SCENES[state.roundIndex].injections] };
   const stakeholders = scene.stakeholders.map(stakeholderById).filter(Boolean);
 
   const isTraining = state.difficulty === "training";
+  const modifiers = isTraining ? { extraConstraint: null, extraInjection: null, modifiedSetup: null, modelMomentum: false } : getSceneModifiers(scene, state.decisionFingerprint);
+  if (modifiers.extraConstraint) scene.constraints.push(modifiers.extraConstraint);
+  if (modifiers.extraInjection) {
+    scene.injections.push(modifiers.extraInjection);
+    scene.injections.sort((a, b) => a.at_s - b.at_s);
+  }
+  if (modifiers.modifiedSetup) scene.setup = modifiers.modifiedSetup;
+
   const injectionSchedule = calculateInjectionSchedule(scene.injections, diff.seconds, isTraining);
 
   state.round = {
@@ -521,8 +765,37 @@ function beginRound() {
     mode: null,
     textBySection: {},
     tagsBySection: {},
+    tagHistory: [],
     timedOut: false,
+    activeModeCSection: 0,
+    sceneModifiers: modifiers,
+    adaptivePauses: false,
+    pressureDirection: null,
   };
+
+  if (!isTraining) {
+    const adjustments = adaptiveDifficulty.getAdjustments();
+    state.round.secondsTotal = Math.max(30, state.round.secondsTotal + adjustments.timerAdjust);
+    state.round.secondsLeft = Math.max(30, state.round.secondsLeft + adjustments.timerAdjust);
+    if (adjustments.extraInterrupt) {
+      scene.injections.push({
+        at_s: Math.min(state.round.secondsTotal * 0.6, 60),
+        window: 10,
+        from: pick(scene.stakeholders, state.roundIndex + 3),
+        line: "Adaptive pressure: an unexpected stakeholder demand escalates the situation!",
+        extra: true,
+      });
+      scene.injections.sort((a, b) => a.at_s - b.at_s);
+      state.round.injectionSchedule = calculateInjectionSchedule(scene.injections, state.round.secondsTotal, false);
+    }
+    if (adjustments.interruptPauses) {
+      state.round.adaptivePauses = true;
+    }
+    state.round.pressureDirection = adjustments.pressureDirection;
+    if (adjustments.pressureDirection) {
+      showPressureIndicator(adjustments.pressureDirection);
+    }
+  }
 }
 
 function calculateInjectionSchedule(injections, roundDuration, isTraining) {
@@ -563,6 +836,12 @@ function renderRound() {
   const wrap = document.createElement("div");
   wrap.className = "card";
 
+  const panelTimer = document.createElement("div");
+  panelTimer.className = "timer-display";
+  panelTimer.id = "panel-timer";
+  panelTimer.textContent = formatTimer(state.round.secondsLeft);
+  wrap.appendChild(panelTimer);
+
   const title = document.createElement("h2");
   title.className = "card__title";
   title.textContent = "Round";
@@ -595,8 +874,11 @@ function renderRound() {
   modeRow.className = "row";
 
   const btnA = modeButton("1", MODE_LABEL[MODES.A], "btn--danger", () => selectMode(MODES.A));
+  btnA.title = "⚠ Stability -8, Vision -7, Health -6, Burn +10, Confidence +4";
   const btnB = modeButton("2", MODE_LABEL[MODES.B], "btn--ghost", () => selectMode(MODES.B));
+  btnB.title = "↔ Stability -2, Vision +1, Health +4, Burn +2, Confidence -3";
   const btnC = modeButton("3", MODE_LABEL[MODES.C], "btn--primary", () => selectMode(MODES.C));
+  btnC.title = "✓ Stability +10, Vision +8, Health +6, Burn -3, Confidence +4 (if complete)";
   modeRow.appendChild(btnA);
   modeRow.appendChild(btnB);
   modeRow.appendChild(btnC);
@@ -661,6 +943,15 @@ function renderRound() {
     const m = $("#pill-mode");
     if (m) m.querySelector(".pill__value").textContent = state.round.mode ? MODE_LABEL[state.round.mode] : "Choose A/B/C";
 
+    const pt = $("#panel-timer");
+    if (pt) {
+      pt.textContent = formatTimer(state.round.secondsLeft);
+      const sl = state.round.secondsLeft;
+      pt.classList.remove("timer-display--urgent", "timer-display--critical");
+      if (sl < 15) pt.classList.add("timer-display--critical");
+      else if (sl < 30) pt.classList.add("timer-display--urgent");
+    }
+
     const req = $("#required-tags");
     const reqTags = Array.from(state.round.requiredTags);
     if (req) {
@@ -712,6 +1003,23 @@ function renderRound() {
   state.ui.update = update;
   update();
   renderModeForm();
+
+  const undoKeyHandler = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      e.preventDefault();
+      performTagUndo();
+    }
+  };
+  document.addEventListener("keydown", undoKeyHandler);
+  const origUpdate = update;
+  state.ui.update = () => {
+    origUpdate();
+  };
+  const cleanupUndo = () => {
+    document.removeEventListener("keydown", undoKeyHandler);
+  };
+  const prevSetScreen = setScreen;
+  state._undoCleanup = cleanupUndo;
 
   if (SMOKE) runSmokeScriptForCurrentRound();
 }
@@ -790,6 +1098,7 @@ function renderModeForm() {
 
   const chips = createChipset({
     selected: new Set(state.round.tagsBySection.summary || []),
+    sectionId: "summary",
     onToggle: (id, isSelected) => {
       const next = new Set(state.round.tagsBySection.summary || []);
       if (isSelected) next.add(id);
@@ -801,64 +1110,119 @@ function renderModeForm() {
 }
 
 function renderModeCForm() {
+  const MODE_C_META = [
+    { id: "purpose_anchor", title: "Purpose Anchor", helper: "Vision + Rationale/Success Criteria/KPIs" },
+    { id: "immediate_48h_action", title: "Immediate 48h Action", helper: "Strategy + Responsible or Accountable" },
+    { id: "boundary_statement", title: "Boundary Statement / Non‑negotiables", helper: "Scope + Logistical Constraints" },
+    { id: "lifecycle_impact", title: "Lifecycle / Whole-of-life Impact", helper: "KPIs and/or As-is State" },
+    { id: "stakeholder_message", title: "Stakeholder Message", helper: "Internal/External Stakeholder + Team Governance" },
+  ];
+
+  const activeIdx = state.round.activeModeCSection ?? 0;
+
+  const isSectionComplete = (sectionId) => {
+    const hasText = (state.round.textBySection[sectionId] || "").trim().length > 0;
+    const hasTags = (state.round.tagsBySection[sectionId] || []).length > 0;
+    return hasText && hasTags;
+  };
+
+  const findNextIncomplete = (fromIdx) => {
+    for (let i = fromIdx + 1; i < MODE_C_META.length; i++) {
+      if (!isSectionComplete(MODE_C_META[i].id)) return i;
+    }
+    for (let i = 0; i < fromIdx; i++) {
+      if (!isSectionComplete(MODE_C_META[i].id)) return i;
+    }
+    return fromIdx;
+  };
+
   const container = document.createElement("div");
-  container.className = "grid";
+  container.className = "mode-c-stepper";
 
-  container.appendChild(
-    modeCSection({
-      id: "purpose_anchor",
-      title: "Purpose Anchor",
-      helper: "Must tag: Vision + one of Rationale / Success Criteria / KPIs",
-      placeholder: "Restate the long-term product intent without corporate wallpaper.",
-    }),
-  );
+  const incompleteSections = state.round._modeCIncompleteSections;
 
-  container.appendChild(
-    modeCSection({
-      id: "immediate_48h_action",
-      title: "Immediate 48h Action",
-      helper: "Must tag: Strategy + Responsible or Accountable",
-      placeholder: "What happens in the next 48 hours? Who owns it?",
-    }),
-  );
+  MODE_C_META.forEach((meta, idx) => {
+    const step = document.createElement("div");
+    step.className = "mode-c-step";
 
-  container.appendChild(
-    modeCSection({
-      id: "boundary_statement",
-      title: "Boundary Statement / Non‑negotiables",
-      helper: "Must tag: Scope + Logistical Constraints",
-      placeholder: "What will not be compromised? Where is the boundary under pressure?",
-    }),
-  );
+    const completed = isSectionComplete(meta.id);
+    const isActive = idx === activeIdx;
+    const isIncomplete = incompleteSections && incompleteSections.has(meta.id);
 
-  container.appendChild(
-    modeCSection({
-      id: "lifecycle_impact",
-      title: "Lifecycle / Whole-of-life Impact",
-      helper: "Must tag: KPIs and/or As-is State",
-      placeholder: "What invisible system costs or consequences might emerge later?",
-    }),
-  );
+    if (isIncomplete) step.classList.add("mode-c-step--incomplete");
+    else if (isActive) step.classList.add("mode-c-step--active");
+    else if (completed) step.classList.add("mode-c-step--completed");
 
-  container.appendChild(
-    modeCSection({
-      id: "stakeholder_message",
-      title: "Stakeholder Message",
-      helper: "Must tag: Internal/External Stakeholder Context + Team Governance",
-      placeholder: "What message aligns stakeholders without hiding reality?",
-    }),
-  );
+    const header = document.createElement("div");
+    header.className = "mode-c-step__header";
+
+    const indicator = document.createElement("div");
+    indicator.className = "mode-c-step__indicator";
+    indicator.textContent = completed ? "✓" : String(idx + 1);
+
+    const title = document.createElement("div");
+    title.className = "mode-c-step__title";
+    title.textContent = meta.title;
+
+    const helper = document.createElement("div");
+    helper.className = "mode-c-step__helper";
+    helper.textContent = meta.helper;
+
+    header.appendChild(indicator);
+    header.appendChild(title);
+    header.appendChild(helper);
+
+    header.addEventListener("click", () => {
+      state.round.activeModeCSection = idx;
+      delete state.round._modeCIncompleteSections;
+      renderModeForm();
+      state.ui.update();
+    });
+
+    const body = document.createElement("div");
+    body.className = "mode-c-step__body";
+    body.appendChild(
+      modeCSection({
+        id: meta.id,
+        placeholder: getPlaceholderForSection(meta.id),
+        onChipToggle: () => {
+          delete state.round._modeCIncompleteSections;
+          if (isSectionComplete(meta.id) && state.round.activeModeCSection === idx) {
+            const nextIdx = findNextIncomplete(idx);
+            if (nextIdx !== idx) {
+              setTimeout(() => {
+                state.round.activeModeCSection = nextIdx;
+                renderModeForm();
+                state.ui.update();
+              }, 500);
+            }
+          }
+        },
+      }),
+    );
+
+    step.appendChild(header);
+    step.appendChild(body);
+    container.appendChild(step);
+  });
 
   return container;
 }
 
-function modeCSection({ id, title, helper, placeholder }) {
+function getPlaceholderForSection(sectionId) {
+  const placeholders = {
+    purpose_anchor: "Restate the long-term product intent without corporate wallpaper.",
+    immediate_48h_action: "What happens in the next 48 hours? Who owns it?",
+    boundary_statement: "What will not be compromised? Where is the boundary under pressure?",
+    lifecycle_impact: "What invisible system costs or consequences might emerge later?",
+    stakeholder_message: "What message aligns stakeholders without hiding reality?",
+  };
+  return placeholders[sectionId] || "";
+}
+
+function modeCSection({ id, placeholder, onChipToggle }) {
   const sec = document.createElement("div");
   sec.className = "grid";
-
-  const label = document.createElement("label");
-  label.textContent = `${title} — ${helper}`;
-  sec.appendChild(label);
 
   const ta = document.createElement("textarea");
   ta.placeholder = placeholder;
@@ -870,11 +1234,13 @@ function modeCSection({ id, title, helper, placeholder }) {
 
   const chips = createChipset({
     selected: new Set(state.round.tagsBySection[id] || []),
+    sectionId: id,
     onToggle: (tagId, isSelected) => {
       const next = new Set(state.round.tagsBySection[id] || []);
       if (isSelected) next.add(tagId);
       else next.delete(tagId);
       state.round.tagsBySection[id] = Array.from(next);
+      if (onChipToggle) onChipToggle();
     },
   });
   sec.appendChild(chips);
@@ -882,9 +1248,39 @@ function modeCSection({ id, title, helper, placeholder }) {
   return sec;
 }
 
-function createChipset({ selected, onToggle }) {
+function createChipset({ selected, onToggle, sectionId }) {
   const container = document.createElement("div");
   container.className = "chipset";
+
+  const tagLabel = document.createElement("span");
+  tagLabel.style.fontSize = "12px";
+  tagLabel.style.color = "var(--text-muted)";
+  tagLabel.style.fontWeight = "700";
+  tagLabel.style.textTransform = "uppercase";
+  tagLabel.style.letterSpacing = "0.5px";
+  tagLabel.style.marginRight = "8px";
+  tagLabel.textContent = "Tags";
+
+  const undoBtn = document.createElement("button");
+  undoBtn.type = "button";
+  undoBtn.className = "btn btn--ghost";
+  undoBtn.style.fontSize = "11px";
+  undoBtn.style.padding = "4px 10px";
+  undoBtn.textContent = "Undo";
+  undoBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    performTagUndo();
+  });
+
+  const headerRow = document.createElement("div");
+  headerRow.style.display = "flex";
+  headerRow.style.alignItems = "center";
+  headerRow.style.gap = "8px";
+  headerRow.style.marginBottom = "6px";
+  headerRow.appendChild(tagLabel);
+  headerRow.appendChild(undoBtn);
+  container.appendChild(headerRow);
+
   for (const f of SHARED_MODEL_FIELDS) {
     const chip = document.createElement("div");
     chip.className = "chip";
@@ -898,6 +1294,14 @@ function createChipset({ selected, onToggle }) {
       chip.dataset.selected = nextSelected ? "true" : "false";
       chip.setAttribute("aria-pressed", nextSelected ? "true" : "false");
       onToggle(f.id, nextSelected);
+      if (state.round && state.round.tagHistory) {
+        state.round.tagHistory.push({
+          sectionId,
+          tagId: f.id,
+          action: nextSelected ? "add" : "remove",
+        });
+      }
+      audioManager.playChipToggle();
     };
     chip.addEventListener("click", toggle);
     chip.addEventListener("keydown", (e) => {
@@ -911,7 +1315,24 @@ function createChipset({ selected, onToggle }) {
   return container;
 }
 
+function performTagUndo() {
+  if (!state.round || !state.round.tagHistory || state.round.tagHistory.length === 0) return;
+  const last = state.round.tagHistory.pop();
+  const tags = state.round.tagsBySection[last.sectionId];
+  if (!tags) return;
+  const tagSet = new Set(tags);
+  if (last.action === "add") {
+    tagSet.delete(last.tagId);
+  } else {
+    tagSet.add(last.tagId);
+  }
+  state.round.tagsBySection[last.sectionId] = Array.from(tagSet);
+  renderModeForm();
+  state.ui.update();
+}
+
 function selectMode(mode) {
+  audioManager.playClick();
   state.round.mode = mode;
   renderModeForm();
   state.ui.update();
@@ -932,6 +1353,8 @@ function submitRound() {
   const requiredTags = Array.from(state.round.requiredTags);
 
   const diff = DIFFICULTY[state.difficulty] || DIFFICULTY.standard;
+  const averageMeterValue = (state.meters.sharedModelStability + state.meters.visionIntegrity + state.meters.stakeholderConfidence + state.meters.systemHealth + (100 - state.meters.burnRate)) / 5;
+  const adaptiveModifiers = state.difficulty !== "training" ? { pressureDirection: state.round.pressureDirection } : null;
   const { deltas, notes, triggers, tagCoverage, allTags } = computeRoundDeltas({
     mode: state.round.mode,
     timedOut: state.round.timedOut,
@@ -942,7 +1365,16 @@ function submitRound() {
     persistentMods: state.persistentMods,
     requiredTags,
     difficulty: state.difficulty,
+    adaptiveModifiers,
   });
+
+  if (state.difficulty !== "training") {
+    adaptiveDifficulty.recordRound({
+      averageMeterValue,
+      tagCoverage,
+      modeUsed: state.round.mode,
+    });
+  }
 
   const unmetReq = requiredTags.filter((t) => !new Set(allTags).has(t));
   const modeCValidation =
@@ -950,8 +1382,65 @@ function submitRound() {
       ? validateModeCResponse({ textBySection: state.round.textBySection, tagsBySection: state.round.tagsBySection })
       : null;
 
+  if (modeCValidation && !modeCValidation.ok && !state.round.timedOut) {
+    const allProblemSections = [...new Set([...modeCValidation.missingText, ...modeCValidation.missingTags])];
+    const violationSections = modeCValidation.violations.map((v) => {
+      if (v.code === "purpose_anchor_requirements") return "purpose_anchor";
+      if (v.code === "immediate_action_requirements") return "immediate_48h_action";
+      if (v.code === "boundary_requirements") return "boundary_statement";
+      if (v.code === "lifecycle_requirements") return "lifecycle_impact";
+      if (v.code === "stakeholder_requirements") return "stakeholder_message";
+      return null;
+    }).filter(Boolean);
+    const allSections = [...allProblemSections, ...violationSections];
+    const firstProblemIdx = allSections.length
+      ? MODE_C_SECTIONS.indexOf(allSections[0])
+      : 0;
+    if (firstProblemIdx >= 0) state.round.activeModeCSection = firstProblemIdx;
+    state.round._modeCIncompleteSections = new Set(allSections);
+    renderModeForm();
+    state.ui.update();
+    return;
+  }
+
   state.previousMeters = { ...state.meters };
   state.meters = applyDeltas(state.meters, deltas);
+
+  for (const [key, delta] of Object.entries(deltas)) {
+    if (delta && Math.abs(delta) > 0) {
+      showMeterNotification(key, delta);
+    }
+  }
+
+  const meterLabels = {
+    sharedModelStability: "Shared Model Stability",
+    visionIntegrity: "Vision Integrity",
+    stakeholderConfidence: "Stakeholder Confidence",
+    systemHealth: "System Health",
+    burnRate: "Burn Rate",
+  };
+  const meterMessages = [];
+  for (const [key, delta] of Object.entries(deltas)) {
+    if (delta && delta !== 0) {
+      const prev = state.previousMeters[key];
+      const curr = state.meters[key];
+      const direction = delta > 0 ? "increased" : "decreased";
+      meterMessages.push(`${meterLabels[key] || key} ${direction} from ${prev} to ${curr}`);
+    }
+  }
+  if (meterMessages.length > 0) {
+    const ariaMeterEl = $("#aria-meter-changes");
+    if (ariaMeterEl) {
+      ariaMeterEl.textContent = meterMessages.join(". ") + ".";
+      setTimeout(() => { ariaMeterEl.textContent = ""; }, 3000);
+    }
+  }
+
+  const netDelta = Object.values(deltas).reduce((sum, d) => sum + (d || 0), 0);
+  if (netDelta > 0) audioManager.playMeterPositive();
+  else if (netDelta < 0) audioManager.playMeterNegative();
+
+  audioManager.playSubmit();
   if (state.round.mode === MODES.A) state.tacticalCount += 1;
 
   for (const tagId of allTags) {
@@ -963,6 +1452,22 @@ function submitRound() {
     if (!hasVision) state.driftTimeline.push({ round: state.roundIndex + 1, when: "Purpose Anchor", note: "Vision dropped." });
   }
 
+  if (state.difficulty !== "training") {
+    const fp = state.decisionFingerprint;
+    if (state.round.mode === MODES.A) fp.modeACount += 1;
+    const allSectionTags = Object.values(state.round.tagsBySection || {}).flat().filter(Boolean);
+    if (allSectionTags.includes("vision")) fp.visionTagUsed += 1;
+    fp.totalRoundsPlayed += 1;
+    if (state.round.mode === MODES.C && modeCValidation && modeCValidation.ok) fp.modeCSuccessCount += 1;
+    fp.tagCoverageHistory.push(tagCoverage);
+  }
+
+  if (state.round.sceneModifiers?.modelMomentum) {
+    const momentumDeltas = { sharedModelStability: 3, stakeholderConfidence: 2, visionIntegrity: 0, systemHealth: 0, burnRate: 0 };
+    state.meters = applyDeltas(state.meters, momentumDeltas);
+    showMomentumIndicator();
+  }
+
   let consequence = null;
   for (const trig of triggers) {
     if (trig === "rework_cascade") {
@@ -971,6 +1476,13 @@ function submitRound() {
       state.lastConsequence = consequence;
       state.meters = applyDeltas(state.meters, consequence.effects);
     }
+  }
+
+  if (fp.modeACount === 5) {
+    consequence = CONSEQUENCES.tactical_debt_accumulation;
+    state.persistentMods = { ...(state.persistentMods || {}), ...(consequence.persistent || {}) };
+    state.lastConsequence = consequence;
+    state.meters = applyDeltas(state.meters, consequence.effects);
   }
 
   // Round summary snapshot
@@ -994,6 +1506,8 @@ function submitRound() {
   // End conditions
   const failed =
     state.meters.sharedModelStability <= 0 || state.meters.systemHealth <= 0 || state.meters.burnRate >= 100;
+
+  saveGameState(state);
 
   state.round = null;
   if (failed) {
@@ -1083,18 +1597,15 @@ function renderDebrief() {
   divider.className = "divider";
   wrap.appendChild(divider);
 
-  // User Responses Section
   if (s.textBySection && Object.keys(s.textBySection).length > 0) {
     const responsesSection = document.createElement("div");
     responsesSection.className = "debrief-responses";
-    
+
     const responsesTitle = document.createElement("div");
-    responsesTitle.className = "card__title";
-    responsesTitle.style.fontSize = "16px";
-    responsesTitle.style.marginBottom = "12px";
+    responsesTitle.className = "section-header";
     responsesTitle.textContent = "Your Responses";
     responsesSection.appendChild(responsesTitle);
-    
+
     const MODE_C_FIELD_LABELS = {
       purpose_anchor: "Purpose Anchor",
       immediate_48h_action: "Immediate 48h Action",
@@ -1103,33 +1614,33 @@ function renderDebrief() {
       stakeholder_message: "Stakeholder Message",
       summary: "Summary",
     };
-    
+
     for (const [sectionId, text] of Object.entries(s.textBySection)) {
       if (!text || !text.trim()) continue;
-      
+
       const responseCard = document.createElement("div");
       responseCard.className = "debrief-response-card";
-      
+
       const cardHeader = document.createElement("div");
       cardHeader.className = "debrief-response-card__header";
       cardHeader.textContent = MODE_C_FIELD_LABELS[sectionId] || sectionId;
       responseCard.appendChild(cardHeader);
-      
+
       const responseText = document.createElement("div");
       responseText.className = "debrief-response-card__text";
       responseText.textContent = text;
       responseCard.appendChild(responseText);
-      
+
       const tags = s.tagsBySection?.[sectionId] || [];
       if (tags.length > 0) {
         const tagsContainer = document.createElement("div");
         tagsContainer.className = "debrief-response-card__tags";
-        
+
         const tagsLabel = document.createElement("span");
         tagsLabel.className = "debrief-response-card__tags-label";
         tagsLabel.textContent = "Tags: ";
         tagsContainer.appendChild(tagsLabel);
-        
+
         tags.forEach(tagId => {
           const tagChip = document.createElement("span");
           tagChip.className = "debrief-tag-chip";
@@ -1137,10 +1648,9 @@ function renderDebrief() {
           tagChip.textContent = fieldById(tagId)?.label || tagId;
           tagsContainer.appendChild(tagChip);
         });
-        
+
         responseCard.appendChild(tagsContainer);
-        
-        // Tag feedback
+
         const stakeholder = findBestMatchingStakeholder(sectionId, tags);
         if (stakeholder) {
           const feedback = generateTagFeedback(sectionId, tags, stakeholder);
@@ -1152,25 +1662,275 @@ function renderDebrief() {
           }
         }
       }
-      
+
       responsesSection.appendChild(responseCard);
     }
-    
+
     wrap.appendChild(responsesSection);
-    
+
     const divider1b = document.createElement("div");
     divider1b.className = "divider";
     wrap.appendChild(divider1b);
   }
 
+  const meterDeltaSection = document.createElement("div");
+  meterDeltaSection.className = "section-group";
+
+  const meterDeltaHeader = document.createElement("div");
+  meterDeltaHeader.className = "section-header";
+  meterDeltaHeader.textContent = "Meter Changes";
+  meterDeltaSection.appendChild(meterDeltaHeader);
+
+  const METER_INFO = [
+    { key: "sharedModelStability", label: "Stability" },
+    { key: "visionIntegrity", label: "Vision" },
+    { key: "stakeholderConfidence", label: "Confidence" },
+    { key: "systemHealth", label: "Health" },
+    { key: "burnRate", label: "Burn Rate" },
+  ];
+
+  for (const mi of METER_INFO) {
+    const prev = state.previousMeters[mi.key] ?? 0;
+    const curr = state.meters[mi.key] ?? 0;
+    const delta = curr - prev;
+
+    const bar = document.createElement("div");
+    bar.className = "delta-bar";
+
+    const barLabel = document.createElement("div");
+    barLabel.className = "delta-bar__label";
+    barLabel.textContent = mi.label;
+    bar.appendChild(barLabel);
+
+    const track = document.createElement("div");
+    track.className = "delta-bar__track";
+
+    const ghost = document.createElement("div");
+    ghost.className = "delta-bar__ghost";
+    ghost.style.width = clamp(prev, 0, 100) + "%";
+    track.appendChild(ghost);
+
+    const fill = document.createElement("div");
+    fill.className = "delta-bar__fill";
+    fill.style.width = clamp(curr, 0, 100) + "%";
+    fill.style.background = gaugeZoneColor(curr);
+    track.appendChild(fill);
+
+    bar.appendChild(track);
+
+    const val = document.createElement("div");
+    val.className = "delta-bar__value";
+    if (delta >= 0) {
+      val.classList.add("delta-bar__value--positive");
+      val.textContent = "+" + Math.round(delta);
+    } else {
+      val.classList.add("delta-bar__value--negative");
+      val.textContent = Math.round(delta);
+    }
+    bar.appendChild(val);
+
+    meterDeltaSection.appendChild(bar);
+  }
+
+  wrap.appendChild(meterDeltaSection);
+
+  const dividerMeters = document.createElement("div");
+  dividerMeters.className = "divider";
+  wrap.appendChild(dividerMeters);
+
+  const alignmentSection = document.createElement("div");
+  alignmentSection.className = "section-group";
+
+  const alignmentHeader = document.createElement("div");
+  alignmentHeader.className = "section-header";
+  alignmentHeader.textContent = "Stakeholder Alignment";
+  alignmentSection.appendChild(alignmentHeader);
+
+  const scene = SCENES[state.roundIndex];
+  const stakeholders = scene ? scene.stakeholders.map(stakeholderById).filter(Boolean) : [];
+  const allUsedTags = uniq(
+    Object.values(s.tagsBySection || {})
+      .flat()
+      .filter(Boolean),
+  );
+  const DISC_COLORS = { D: "#ff3366", i: "#ffb700", S: "#00d4aa", C: "#6b8afd" };
+
+  for (const st of stakeholders) {
+    let rawScore = 0;
+    const rewards = st.rewards || {};
+    for (const [tag, w] of Object.entries(rewards)) {
+      if (allUsedTags.includes(tag)) rawScore += w;
+    }
+    const dislikes = st.dislikes || {};
+    for (const [tag, w] of Object.entries(dislikes)) {
+      if (allUsedTags.includes(tag)) rawScore -= w;
+    }
+    const normScore = clamp(Math.round((rawScore + 6) / 16 * 100), 0, 100);
+    let label;
+    if (normScore <= 25) label = "Misaligned";
+    else if (normScore <= 50) label = "Partial";
+    else if (normScore <= 75) label = "Aligned";
+    else label = "Strong";
+
+    const scoreEl = document.createElement("div");
+    scoreEl.className = "alignment-score";
+
+    const avatar = document.createElement("div");
+    avatar.className = "alignment-score__avatar";
+    avatar.style.background = DISC_COLORS[st.disc] || "#6b8afd";
+    avatar.textContent = st.name.charAt(0);
+    scoreEl.appendChild(avatar);
+
+    const info = document.createElement("div");
+    info.className = "alignment-score__info";
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "alignment-score__name";
+    nameEl.textContent = st.name;
+    info.appendChild(nameEl);
+
+    const labelEl = document.createElement("div");
+    labelEl.className = "alignment-score__label";
+    labelEl.textContent = label;
+    info.appendChild(labelEl);
+
+    scoreEl.appendChild(info);
+
+    const valueEl = document.createElement("div");
+    valueEl.className = "alignment-score__value";
+    valueEl.textContent = normScore;
+    scoreEl.appendChild(valueEl);
+
+    alignmentSection.appendChild(scoreEl);
+  }
+
+  wrap.appendChild(alignmentSection);
+
+  const dividerAlign = document.createElement("div");
+  dividerAlign.className = "divider";
+  wrap.appendChild(dividerAlign);
+
+  const radarSection = document.createElement("div");
+  radarSection.className = "section-group";
+
+  const radarHeader = document.createElement("div");
+  radarHeader.className = "section-header";
+  radarHeader.textContent = "Tag Coverage Radar";
+  radarSection.appendChild(radarHeader);
+
+  const radarCanvas = document.createElement("canvas");
+  radarCanvas.id = "radar-chart-canvas";
+  radarCanvas.width = 360;
+  radarCanvas.height = 280;
+  radarCanvas.style.width = "100%";
+  radarCanvas.style.maxWidth = "360px";
+  radarCanvas.style.height = "auto";
+  radarSection.appendChild(radarCanvas);
+
+  wrap.appendChild(radarSection);
+
+  const dividerRadar = document.createElement("div");
+  dividerRadar.className = "divider";
+  wrap.appendChild(dividerRadar);
+
+  let biggestDeltaKey = null;
+  let biggestDeltaAbs = 0;
+  for (const mi of METER_INFO) {
+    const d = Math.abs((state.meters[mi.key] ?? 0) - (state.previousMeters[mi.key] ?? 0));
+    if (d > biggestDeltaAbs) {
+      biggestDeltaAbs = d;
+      biggestDeltaKey = mi.key;
+    }
+  }
+
+  if (biggestDeltaKey) {
+    const insightEl = document.createElement("div");
+    insightEl.className = "key-insight";
+
+    const insightLabel = document.createElement("div");
+    insightLabel.className = "key-insight__label";
+    insightLabel.textContent = "Key Insight";
+    insightEl.appendChild(insightLabel);
+
+    const insightText = document.createElement("div");
+    insightText.className = "key-insight__text";
+
+    const delta = (state.meters[biggestDeltaKey] ?? 0) - (state.previousMeters[biggestDeltaKey] ?? 0);
+    const meterInfo = METER_INFO.find(m => m.key === biggestDeltaKey);
+    const meterName = meterInfo ? meterInfo.label : biggestDeltaKey;
+
+    if (delta >= 0) {
+      insightText.textContent = `Your ${MODE_LABEL[s.mode]} response strengthened ${meterName} by ${Math.round(delta)} points — the biggest gain this round.`;
+    } else {
+      insightText.textContent = `${meterName} dropped by ${Math.round(Math.abs(delta))} points. Consider more strategic responses next round.`;
+    }
+
+    insightEl.appendChild(insightText);
+    wrap.appendChild(insightEl);
+
+    const dividerInsight = document.createElement("div");
+    dividerInsight.className = "divider";
+    wrap.appendChild(dividerInsight);
+  }
+
+  const recSection = document.createElement("div");
+  recSection.className = "section-group";
+
+  const recHeader = document.createElement("div");
+  recHeader.className = "section-header";
+  recHeader.textContent = "Recommendations";
+  recSection.appendChild(recHeader);
+
+  const tagCov = s.tagCoverage;
+  if (tagCov < 60) {
+    const card = document.createElement("div");
+    card.className = "recommendation-card recommendation-card--warning";
+    card.textContent = "Your tag coverage is low. Try to anchor responses to at least 2-3 model fields per section.";
+    recSection.appendChild(card);
+  }
+
+  for (const mi of METER_INFO) {
+    if ((state.meters[mi.key] ?? 0) < 30) {
+      const card = document.createElement("div");
+      card.className = "recommendation-card recommendation-card--danger";
+      card.textContent = `${mi.label} is critically low. Focus on decisions that protect this dimension.`;
+      recSection.appendChild(card);
+    }
+  }
+
+  if (s.mode === MODES.A) {
+    const card = document.createElement("div");
+    card.className = "recommendation-card recommendation-card--warning";
+    card.textContent = "Tactical patches provide short-term relief but accumulate debt. Consider Mode B or C when possible.";
+    recSection.appendChild(card);
+  }
+
+  if (s.unmetReq && s.unmetReq.length > 0) {
+    const card = document.createElement("div");
+    card.className = "recommendation-card recommendation-card--danger";
+    card.textContent = "You missed interrupt requirements. Always address stakeholder-required tags first.";
+    recSection.appendChild(card);
+  }
+
+  const nonBurnMetersAbove70 = METER_INFO.filter(mi => mi.key !== "burnRate").every(mi => (state.meters[mi.key] ?? 0) > 70);
+  const burnRateLow = (state.meters.burnRate ?? 100) < 30;
+  if (nonBurnMetersAbove70 && burnRateLow && tagCov > 70) {
+    const card = document.createElement("div");
+    card.className = "recommendation-card";
+    card.textContent = "Excellent round! Your model discipline is paying off.";
+    recSection.appendChild(card);
+  }
+
+  if (recSection.childNodes.length > 1) {
+    wrap.appendChild(recSection);
+
+    const dividerRec = document.createElement("div");
+    dividerRec.className = "divider";
+    wrap.appendChild(dividerRec);
+  }
+
   const metrics = document.createElement("div");
   metrics.className = "grid";
-  metrics.appendChild(
-    metricLine(
-      "Meters",
-      `Stability ${s.metersAfter.sharedModelStability} • Vision ${s.metersAfter.visionIntegrity} • Confidence ${s.metersAfter.stakeholderConfidence} • Health ${s.metersAfter.systemHealth} • Burn ${s.metersAfter.burnRate}`,
-    ),
-  );
   if (s.requiredTags.length) {
     metrics.appendChild(
       metricLine(
@@ -1185,7 +1945,9 @@ function renderDebrief() {
     const c = CONSEQUENCES[s.consequence] || state.lastConsequence;
     if (c) metrics.appendChild(metricLine("Consequence", c.title));
   }
-  wrap.appendChild(metrics);
+  if (metrics.childNodes.length > 0) {
+    wrap.appendChild(metrics);
+  }
 
   if (s.modeCValidation && !s.modeCValidation.ok) {
     const warn = document.createElement("div");
@@ -1234,6 +1996,12 @@ function renderDebrief() {
 
   wrap.appendChild(actions);
   screenRoot.appendChild(wrap);
+
+  setTimeout(() => {
+    const radarEl = document.getElementById("radar-chart-canvas");
+    if (radarEl) drawRadarChart(radarEl);
+  }, 0);
+
   state.ui.update = () => {};
 }
 
@@ -1304,9 +2072,62 @@ function renderEnd() {
     wrap.appendChild(list);
   }
 
+  const finalScore = calculateFinalScore(state.meters, state.difficulty, state.roundIndex, Object.values(state.tagsUsedCounts).reduce((a, b) => a + b, 0));
+  saveHighScore(state.difficulty, finalScore, state.meters);
+
+  const modeDistribution = { a: 0, b: 0, c: 0 };
+  if (state.lastRoundSummary) {
+    const m = state.lastRoundSummary.mode;
+    if (m === "tactical_patch") modeDistribution.a = 1;
+    else if (m === "strategic_pause") modeDistribution.b = 1;
+    else if (m === "model_reframe") modeDistribution.c = 1;
+  }
+  saveSessionStats({
+    tagCoverage: Object.values(state.tagsUsedCounts).reduce((a, b) => a + b, 0),
+    rounds: state.roundIndex + 1,
+    modeDistribution,
+    tagsUsedCounts: state.tagsUsedCounts,
+  });
+
+  const sessionStats = loadSessionStats();
+
   const divider4 = document.createElement("div");
   divider4.className = "divider";
   wrap.appendChild(divider4);
+
+  const scoreLine = document.createElement("div");
+  scoreLine.className = "card__desc";
+  scoreLine.innerHTML = "<strong>Final Score:</strong> " + finalScore + " pts";
+  wrap.appendChild(scoreLine);
+
+  if (sessionStats.gamesPlayed > 0) {
+    const avgCoverage = sessionStats.totalRounds > 0
+      ? (sessionStats.totalTagCoverage / sessionStats.totalRounds).toFixed(1)
+      : "0";
+    const modeEntries = Object.entries(sessionStats.modeDistribution || {});
+    const preferredMode = modeEntries.sort((a, b) => b[1] - a[1])[0];
+    const modeLabels = { a: "Tactical Patch", b: "Strategic Pause", c: "Model Reframe" };
+    const tagEntries = Object.entries(sessionStats.tagsUsedCounts || {});
+    const mostUsedTag = tagEntries.sort((a, b) => b[1] - a[1])[0];
+
+    const statsDiv = document.createElement("div");
+    statsDiv.className = "grid";
+    statsDiv.appendChild(metricLine("Session Stats", ""));
+    statsDiv.appendChild(metricLine("Games Played", String(sessionStats.gamesPlayed)));
+    statsDiv.appendChild(metricLine("Avg Tag Coverage", avgCoverage));
+    if (preferredMode && preferredMode[1] > 0) {
+      statsDiv.appendChild(metricLine("Preferred Mode", modeLabels[preferredMode[0]] || preferredMode[0]));
+    }
+    if (mostUsedTag && mostUsedTag[1] > 0) {
+      const field = fieldById(mostUsedTag[0]);
+      statsDiv.appendChild(metricLine("Most-Used Field", (field?.label || mostUsedTag[0]) + " (" + mostUsedTag[1] + ")"));
+    }
+    wrap.appendChild(statsDiv);
+  }
+
+  const divider5 = document.createElement("div");
+  divider5.className = "divider";
+  wrap.appendChild(divider5);
 
   const actions = document.createElement("div");
   actions.className = "row";
@@ -1763,7 +2584,7 @@ function showInterruptPopup(injection, timerPaused) {
   hideInterruptPopup();
   
   const popup = document.createElement("div");
-  popup.className = "interrupt-popup";
+  popup.className = "interrupt-popup interrupt-popup--entering";
   popup.id = "interrupt-popup";
   
   const header = document.createElement("div");
@@ -1843,15 +2664,16 @@ function showInterruptPopup(injection, timerPaused) {
   if (injection.requiredTag) {
     const requiredSection = document.createElement("div");
     requiredSection.className = "interrupt-popup__required";
-    
+    requiredSection.style.fontSize = "15px";
+
     const requiredLabel = document.createElement("div");
     requiredLabel.className = "interrupt-popup__label";
     requiredLabel.innerHTML = "<strong>Required tag:</strong>";
-    
+
     const requiredTag = document.createElement("div");
     requiredTag.className = "interrupt-popup__tag-highlight";
     requiredTag.textContent = fieldById(injection.requiredTag)?.label || injection.requiredTag;
-    
+
     requiredSection.appendChild(requiredLabel);
     requiredSection.appendChild(requiredTag);
     content.appendChild(requiredSection);
@@ -1900,7 +2722,8 @@ function showInterruptPopup(injection, timerPaused) {
   
   setTimeout(() => {
     popup.classList.add("interrupt-popup--visible");
-  }, 10);
+    popup.classList.remove("interrupt-popup--entering");
+  }, 300);
   
   const handleEnterKey = (e) => {
     if (e.key === "Enter") {
@@ -1936,6 +2759,9 @@ function hideInterruptPopup() {
 // ---------- Loop / Timing ----------
 let rafId = null;
 let lastTs = null;
+let lastTickTime = 0;
+let lastUrgentTime = 0;
+let lastAnnouncedMilestone = null;
 
 function startLoop() {
   stopLoop();
@@ -1956,19 +2782,53 @@ function stopLoop() {
 }
 
 function step(dtMs) {
+  for (const key of Object.keys(state.meters)) {
+    state.displayMeters[key] = state.displayMeters[key] + (state.meters[key] - state.displayMeters[key]) * 0.05;
+    if (Math.abs(state.displayMeters[key] - state.meters[key]) < 0.1) {
+      state.displayMeters[key] = state.meters[key];
+    }
+  }
+
   if (state.screen === "round" && state.round) {
     const diff = DIFFICULTY[state.difficulty] || DIFFICULTY.standard;
 
-    const shouldPauseForInjection = diff.injectionPauses && state.round.pausedForInjection;
+    const shouldPauseForInjection = (diff.injectionPauses || state.round.adaptivePauses) && state.round.pausedForInjection;
     if (!shouldPauseForInjection) {
       state.round.secondsLeft = clamp(state.round.secondsLeft - dtMs / 1000, 0, state.round.secondsTotal);
     }
 
     maybeTriggerInjection();
 
+    const secondsLeft = state.round.secondsLeft;
+    const now = performance.now();
+    if (secondsLeft < 15 && now - lastUrgentTime >= 500) {
+      audioManager.playTimerUrgent();
+      lastUrgentTime = now;
+    } else if (secondsLeft >= 15 && secondsLeft < 30 && now - lastTickTime >= 1000) {
+      audioManager.playTimerTick();
+      lastTickTime = now;
+    }
+
+    const ariaTimerEl = $("#aria-timer-updates");
+    const milestones = [
+      { at: 60, msg: "One minute remaining" },
+      { at: 30, msg: "Thirty seconds remaining" },
+      { at: 15, msg: "Fifteen seconds remaining — urgency" },
+      { at: 5, msg: "Five seconds remaining" },
+    ];
+    for (const m of milestones) {
+      if (secondsLeft <= m.at && lastAnnouncedMilestone !== m.at) {
+        lastAnnouncedMilestone = m.at;
+        if (ariaTimerEl) {
+          ariaTimerEl.textContent = m.msg;
+          setTimeout(() => { ariaTimerEl.textContent = ""; }, 3000);
+        }
+        break;
+      }
+    }
+
     if (state.round.secondsLeft <= 0 && !state.round.timedOut) {
       state.round.timedOut = true;
-      // Auto-submit on timeout.
       submitRound();
       return;
     }
@@ -2029,9 +2889,24 @@ function maybeTriggerInjection() {
 
   if (r.activeInjection.requiredTag) r.requiredTags.add(r.activeInjection.requiredTag);
 
-  r.pausedForInjection = diff.injectionPauses;
+  r.pausedForInjection = diff.injectionPauses || r.adaptivePauses;
 
-  showInterruptPopup(r.activeInjection, diff.injectionPauses);
+  showInterruptPopup(r.activeInjection, diff.injectionPauses || r.adaptivePauses);
+  audioManager.playInterrupt(st?.disc);
+
+  const ariaAlertEl = $("#aria-interrupt-alerts");
+  if (ariaAlertEl && r.activeInjection) {
+    const inj = r.activeInjection;
+    const name = inj.fromStakeholder?.name || "Stakeholder";
+    const role = inj.fromStakeholder?.role || "";
+    const reqTag = inj.requiredTag ? fieldById(inj.requiredTag)?.label || inj.requiredTag : "";
+    let msg = `${name}`;
+    if (role) msg += `, ${role}`;
+    msg += ", is interrupting.";
+    if (reqTag) msg += ` Required tag: ${reqTag}.`;
+    ariaAlertEl.textContent = msg;
+    setTimeout(() => { ariaAlertEl.textContent = ""; }, 5000);
+  }
 }
 
 function recommendedRequiredTagForStakeholder(stakeholder) {
@@ -2056,37 +2931,32 @@ function renderCanvas() {
   const h = canvas.height;
   ctx.clearRect(0, 0, w, h);
 
-  // Background frame
   const g = ctx.createLinearGradient(0, 0, w, h);
   g.addColorStop(0, "rgba(255, 176, 32, 0.085)");
   g.addColorStop(1, "rgba(29, 226, 198, 0.085)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // Header
   ctx.fillStyle = "rgba(255,255,255,0.9)";
   ctx.font = "900 26px Fraunces";
   ctx.fillText("Shared Model Under Pressure", 28, 44);
 
-  // Meters
-  const meters = state.meters;
+  const meters = state.displayMeters;
   const previousMeters = state.previousMeters;
-  const meterY = 76;
-  const meterX = 28;
-  const meterW = w - 56;
-  drawMeterRow(meterX, meterY, meterW, meters, previousMeters);
-  const metersHeight = 5 * 14 + 4 * 12;
-  
-  ctx.font = "600 10px Instrument Sans";
-  ctx.fillStyle = "rgba(255,255,255,0.5)";
-  ctx.fillText("Light markers show previous round values", meterX, meterY + metersHeight + 18);
-  
-  const statusBaseY = meterY + metersHeight + 30;
+  const gaugeSpacing = Math.min(w / 6, 160);
+  const gaugeCx = w / 2;
+  const gaugeCy = 120;
+  drawGaugeMeters(gaugeCx, gaugeCy, gaugeSpacing, meters, previousMeters);
 
-  // Vision Jenga / Coherence Tower
-  drawCoherenceTower(w - 260, 260, 220, 60, meters.sharedModelStability);
+  const midY = 240;
+  drawStakeholderAvatars(w * 0.28, midY);
+  drawCoherenceTower(w * 0.72, midY, meters.sharedModelStability);
 
-  // Status strip (avoid overlapping the bars)
+  if (state.screen === "round" && state.round) {
+    drawTimer(w * 0.72, midY + 120);
+  }
+
+  const statusBaseY = midY + 80;
   ctx.font = "650 13px Instrument Sans";
   ctx.fillStyle = "rgba(255,255,255,0.82)";
   const status =
@@ -2102,7 +2972,6 @@ function renderCanvas() {
   if (state.screen === "round" && state.round) {
     const sceneLabel = state.round.scene.title;
     ctx.fillText(`Scene: ${sceneLabel}`, 28, statusBaseY + 24);
-    ctx.fillText(`Time: ${formatTimer(state.round.secondsLeft)} remaining`, 28, statusBaseY + 46);
 
     const reqTags = Array.from(state.round.requiredTags);
     if (reqTags.length) {
@@ -2110,7 +2979,7 @@ function renderCanvas() {
       ctx.fillText(
         `Required tags: ${reqTags.map((t) => fieldById(t)?.label || t).join(" • ")}`,
         28,
-        statusBaseY + 70,
+        statusBaseY + 48,
       );
     }
   }
@@ -2121,165 +2990,443 @@ function renderCanvas() {
     ctx.fillText(
       `Tag coverage: ${state.lastRoundSummary.tagCoverage} • Tactical patches so far: ${state.tacticalCount}`,
       28,
-      statusBaseY + 46,
+      statusBaseY + 48,
     );
-  }
-}
 
-function drawMeterRow(x, y, w, meters, previousMeters) {
-  const items = [
-    ["Shared Model Stability", meters.sharedModelStability, "rgba(29, 226, 198, 0.95)", previousMeters?.sharedModelStability],
-    ["Vision Integrity", meters.visionIntegrity, "rgba(255, 176, 32, 0.98)", previousMeters?.visionIntegrity],
-    ["Stakeholder Confidence", meters.stakeholderConfidence, "rgba(255, 107, 53, 0.95)", previousMeters?.stakeholderConfidence],
-    ["System Health", meters.systemHealth, "rgba(198, 255, 58, 0.9)", previousMeters?.systemHealth],
-    ["Burn Rate", meters.burnRate, "rgba(255, 77, 109, 0.9)", previousMeters?.burnRate],
-  ];
+    const radarCx = w * 0.5;
+    const radarCy = midY + 160;
+    const radarR = 70;
+    const radarCategories = [
+      { label: "Purpose", tags: ["vision", "rationale", "success_criteria"] },
+      { label: "Strategy", tags: ["strategy", "scope", "kpis"] },
+      { label: "Execution", tags: ["as_is_state", "logistical_constraints", "responsible", "accountable"] },
+      { label: "Stakeholders", tags: ["internal_stakeholders", "external_stakeholders", "team_governance"] },
+      { label: "Learning", tags: ["resources_knowledge", "tools_processes"] },
+    ];
+    const radarUsedTags = new Set(
+      Object.values(state.lastRoundSummary.tagsBySection || {})
+        .flat()
+        .filter(Boolean),
+    );
+    const radarValues = radarCategories.map(cat => {
+      const used = cat.tags.filter(t => radarUsedTags.has(t)).length;
+      return used / cat.tags.length;
+    });
+    const rn = radarCategories.length;
 
-  const rowH = 14;
-  const gap = 12;
-  let cy = y;
-
-  ctx.font = "700 12px Instrument Sans";
-  for (const [label, val, color, prevVal] of items) {
-    const barH = rowH;
-    const barW = w;
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    roundRect(ctx, x, cy, barW, barH, 9);
-    ctx.fill();
-
-    ctx.fillStyle = color;
-    roundRect(ctx, x, cy, (barW * clamp(val, 0, 100)) / 100, barH, 9);
-    ctx.fill();
-
-    if (prevVal !== undefined && prevVal !== val) {
-      const prevX = (barW * clamp(prevVal, 0, 100)) / 100;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-      ctx.fillRect(x + prevX - 2, cy, 4, barH);
-      
-      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.fillRect(x + prevX - 1, cy, 2, barH);
-    }
-
-    ctx.fillStyle = "rgba(255,255,255,0.88)";
-    ctx.fillText(`${label} — ${val}`, x + 10, cy + 11);
-
-    cy += barH + gap;
-  }
-}
-
-function drawCoherenceTower(x, y, w, h, stability) {
-  const barWidth = w;
-  const barHeight = 24;
-  const segments = 10;
-  const segmentWidth = (barWidth - (segments + 1) * 3) / segments;
-  const filledSegments = Math.max(0, Math.round((segments * stability) / 100));
-  
-  ctx.save();
-  ctx.translate(x, y);
-  
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.font = "900 16px Fraunces";
-  ctx.textAlign = "center";
-  ctx.fillText("Strategic Coherence", barWidth / 2, -20);
-  
-  ctx.font = "700 12px Instrument Sans";
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + (stability / 100) * 0.3})`;
-  ctx.fillText(`${Math.round(stability)}/100`, barWidth / 2, -4);
-  
-  const bgGradient = ctx.createLinearGradient(0, 0, barWidth, 0);
-  bgGradient.addColorStop(0, "rgba(255, 77, 109, 0.15)");
-  bgGradient.addColorStop(0.25, "rgba(255, 107, 53, 0.15)");
-  bgGradient.addColorStop(0.5, "rgba(255, 183, 0, 0.15)");
-  bgGradient.addColorStop(1, "rgba(29, 226, 198, 0.15)");
-  
-  ctx.fillStyle = bgGradient;
-  roundRect(ctx, 0, 0, barWidth, barHeight, 6);
-  ctx.fill();
-  
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-  ctx.lineWidth = 2;
-  roundRect(ctx, 0, 0, barWidth, barHeight, 6);
-  ctx.stroke();
-  
-  for (let i = 0; i < segments; i++) {
-    const segmentX = 3 + i * (segmentWidth + 3);
-    let segmentColor;
-    
-    if (i < 2) {
-      segmentColor = "rgba(255, 77, 109, 0.3)";
-    } else if (i < 5) {
-      segmentColor = "rgba(255, 107, 53, 0.3)";
-    } else if (i < 7) {
-      segmentColor = "rgba(255, 183, 0, 0.3)";
-    } else {
-      segmentColor = "rgba(29, 226, 198, 0.3)";
-    }
-    
-    ctx.fillStyle = segmentColor;
-    roundRect(ctx, segmentX, 0, segmentWidth, barHeight, 4);
-    ctx.fill();
-    
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-    ctx.lineWidth = 1;
-    roundRect(ctx, segmentX, 0, segmentWidth, barHeight, 4);
-    ctx.stroke();
-  }
-  
-  if (filledSegments > 0) {
-    for (let i = 0; i < filledSegments; i++) {
-      const segmentX = 3 + i * (segmentWidth + 3);
-      let fillColor;
-      let glowColor;
-      
-      if (i < 2) {
-        fillColor = "rgba(255, 77, 109, 0.85)";
-        glowColor = "rgba(255, 77, 109, 0.6)";
-      } else if (i < 5) {
-        fillColor = "rgba(255, 107, 53, 0.85)";
-        glowColor = "rgba(255, 107, 53, 0.6)";
-      } else if (i < 7) {
-        fillColor = "rgba(255, 183, 0, 0.85)";
-        glowColor = "rgba(255, 183, 0, 0.6)";
-      } else {
-        fillColor = "rgba(29, 226, 198, 0.85)";
-        glowColor = "rgba(29, 226, 198, 0.6)";
+    for (let ring = 1; ring <= 4; ring++) {
+      const rr = radarR * (ring / 4);
+      ctx.beginPath();
+      for (let i = 0; i < rn; i++) {
+        const angle = -Math.PI / 2 + (2 * Math.PI * i) / rn;
+        const x = radarCx + Math.cos(angle) * rr;
+        const y = radarCy + Math.sin(angle) * rr;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
-      
-      ctx.fillStyle = fillColor;
-      roundRect(ctx, segmentX, 0, segmentWidth, barHeight, 4);
-      ctx.fill();
-      
-      ctx.shadowColor = glowColor;
-      ctx.shadowBlur = 8;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-      ctx.lineWidth = 1.5;
-      roundRect(ctx, segmentX, 0, segmentWidth, barHeight, 4);
+      ctx.closePath();
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.shadowBlur = 0;
     }
+
+    for (let i = 0; i < rn; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / rn;
+      ctx.beginPath();
+      ctx.moveTo(radarCx, radarCy);
+      ctx.lineTo(radarCx + Math.cos(angle) * radarR, radarCy + Math.sin(angle) * radarR);
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    for (let i = 0; i < rn; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / rn;
+      const r = radarR * radarValues[i];
+      const x = radarCx + Math.cos(angle) * r;
+      const y = radarCy + Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "rgba(29, 226, 198, 0.15)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(29, 226, 198, 0.6)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.font = "600 9px Instrument Sans";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < rn; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / rn;
+      const lx = radarCx + Math.cos(angle) * (radarR + 16);
+      const ly = radarCy + Math.sin(angle) * (radarR + 16);
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillText(radarCategories[i].label, lx, ly);
+    }
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
   }
-  
-  const zoneLabels = [
-    { at: 0, label: "Critical", color: "rgba(255, 77, 109, 0.7)" },
-    { at: 25, label: "Low", color: "rgba(255, 107, 53, 0.7)" },
-    { at: 50, label: "Medium", color: "rgba(255, 183, 0, 0.7)" },
-    { at: 75, label: "High", color: "rgba(29, 226, 198, 0.7)" },
+
+  drawRoundDots(w / 2, h - 30);
+}
+
+function drawRadarChart(canvasEl) {
+  if (!canvasEl) return;
+  const rctx = canvasEl.getContext("2d");
+  const w = canvasEl.width;
+  const h = canvasEl.height;
+  rctx.clearRect(0, 0, w, h);
+
+  const s = state.lastRoundSummary;
+  if (!s) return;
+
+  const allUsedTags = new Set(
+    Object.values(s.tagsBySection || {})
+      .flat()
+      .filter(Boolean),
+  );
+
+  const categories = [
+    { label: "Purpose Anchor", tags: ["vision", "rationale", "success_criteria"] },
+    { label: "Strategic Core", tags: ["strategy", "scope", "kpis"] },
+    { label: "Execution", tags: ["as_is_state", "logistical_constraints", "responsible", "accountable"] },
+    { label: "Stakeholders", tags: ["internal_stakeholders", "external_stakeholders", "team_governance"] },
+    { label: "Learning", tags: ["resources_knowledge", "tools_processes"] },
   ];
-  
-  ctx.font = "600 10px Instrument Sans";
-  ctx.textAlign = "left";
-  zoneLabels.forEach((zone) => {
-    const zoneX = (zone.at / 100) * barWidth;
-    ctx.fillStyle = zone.color;
-    ctx.fillText(zone.label, zoneX, barHeight + 14);
+
+  const values = categories.map(cat => {
+    const used = cat.tags.filter(t => allUsedTags.has(t)).length;
+    return used / cat.tags.length;
   });
-  
-  ctx.fillStyle = "rgba(255,255,255,0.65)";
-  ctx.font = "600 11px Instrument Sans";
+
+  const cx = w / 2;
+  const cy = h / 2 + 10;
+  const maxR = Math.min(w, h) / 2 - 40;
+  const n = categories.length;
+
+  for (let ring = 1; ring <= 4; ring++) {
+    const r = maxR * (ring / 4);
+    rctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+      const x = cx + Math.cos(angle) * r;
+      const y = cy + Math.sin(angle) * r;
+      if (i === 0) rctx.moveTo(x, y);
+      else rctx.lineTo(x, y);
+    }
+    rctx.closePath();
+    rctx.strokeStyle = "rgba(255,255,255,0.1)";
+    rctx.lineWidth = 1;
+    rctx.stroke();
+  }
+
+  for (let i = 0; i < n; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    rctx.beginPath();
+    rctx.moveTo(cx, cy);
+    rctx.lineTo(cx + Math.cos(angle) * maxR, cy + Math.sin(angle) * maxR);
+    rctx.strokeStyle = "rgba(255,255,255,0.12)";
+    rctx.lineWidth = 1;
+    rctx.stroke();
+  }
+
+  rctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    const r = maxR * values[i];
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) rctx.moveTo(x, y);
+    else rctx.lineTo(x, y);
+  }
+  rctx.closePath();
+  rctx.fillStyle = "rgba(29, 226, 198, 0.2)";
+  rctx.fill();
+  rctx.strokeStyle = "rgba(29, 226, 198, 0.8)";
+  rctx.lineWidth = 2;
+  rctx.stroke();
+
+  for (let i = 0; i < n; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    const r = maxR * values[i];
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    rctx.beginPath();
+    rctx.arc(x, y, 3, 0, 2 * Math.PI);
+    rctx.fillStyle = "#1de2c6";
+    rctx.fill();
+  }
+
+  rctx.textAlign = "center";
+  rctx.textBaseline = "middle";
+  rctx.font = "600 10px Instrument Sans";
+  for (let i = 0; i < n; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    const labelR = maxR + 20;
+    const lx = cx + Math.cos(angle) * labelR;
+    const ly = cy + Math.sin(angle) * labelR;
+    rctx.fillStyle = "rgba(255,255,255,0.7)";
+    rctx.fillText(categories[i].label, lx, ly);
+  }
+}
+
+function drawGaugeMeters(cx, cy, spacing, meters, previousMeters) {
+  const items = [
+    ["Stability", meters.sharedModelStability, previousMeters?.sharedModelStability],
+    ["Vision", meters.visionIntegrity, previousMeters?.visionIntegrity],
+    ["Confidence", meters.stakeholderConfidence, previousMeters?.stakeholderConfidence],
+    ["Health", meters.systemHealth, previousMeters?.systemHealth],
+    ["Burn Rate", meters.burnRate, previousMeters?.burnRate],
+  ];
+
+  const radius = 35;
+  const lineWidth = 7;
+  const startX = cx - ((items.length - 1) * spacing) / 2;
+
+  for (let i = 0; i < items.length; i++) {
+    const [label, val, prevVal] = items[i];
+    const gx = startX + i * spacing;
+    const gy = cy;
+    const fraction = clamp(val, 0, 100) / 100;
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + 2 * Math.PI * fraction;
+
+    ctx.beginPath();
+    ctx.arc(gx, gy, radius, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+
+    const arcColor = gaugeZoneColor(val);
+    ctx.beginPath();
+    ctx.arc(gx, gy, radius, startAngle, endAngle);
+    ctx.strokeStyle = arcColor;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.lineCap = "butt";
+
+    if (prevVal !== undefined && Math.abs(prevVal - val) > 0.5) {
+      const prevFraction = clamp(prevVal, 0, 100) / 100;
+      const prevAngle = startAngle + 2 * Math.PI * prevFraction;
+      ctx.beginPath();
+      ctx.arc(gx, gy, radius, prevAngle - 0.03, prevAngle + 0.03);
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = lineWidth + 2;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.font = "900 20px Fraunces";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(Math.round(val), gx, gy);
+
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.font = "600 10px Instrument Sans";
+    ctx.textBaseline = "top";
+    ctx.fillText(label, gx, gy + radius + 10);
+  }
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+function gaugeZoneColor(val) {
+  if (val <= 25) return "#ff3366";
+  if (val <= 50) return "#ff6b35";
+  if (val <= 75) return "#ffb700";
+  return "#00d4aa";
+}
+
+function drawCoherenceTower(cx, cy, stability) {
+  const radius = 50;
+  const lineWidth = 10;
+  const fraction = clamp(stability, 0, 100) / 100;
+  const startAngle = -Math.PI / 2;
+  const endAngle = startAngle + 2 * Math.PI * fraction;
+
+  ctx.save();
   ctx.textAlign = "center";
-  ctx.fillText("Health", barWidth / 2, barHeight + 28);
-  
+
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = "900 14px Fraunces";
+  ctx.fillText("Strategic Coherence", cx, cy - radius - 22);
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = lineWidth;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, startAngle, endAngle);
+  ctx.strokeStyle = gaugeZoneColor(stability);
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.lineCap = "butt";
+
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.font = "900 24px Fraunces";
+  ctx.textBaseline = "middle";
+  ctx.fillText(Math.round(stability), cx, cy);
+
+  const zoneLabels = [
+    { angle: Math.PI * 0.75, label: "Critical", color: "#ff3366" },
+    { angle: Math.PI * 0.25, label: "Low", color: "#ff6b35" },
+    { angle: -Math.PI * 0.25, label: "Medium", color: "#ffb700" },
+    { angle: -Math.PI * 0.75, label: "High", color: "#00d4aa" },
+  ];
+
+  ctx.font = "600 9px Instrument Sans";
+  ctx.textBaseline = "middle";
+  for (const z of zoneLabels) {
+    const zx = cx + Math.cos(z.angle) * (radius + 18);
+    const zy = cy + Math.sin(z.angle) * (radius + 18);
+    ctx.fillStyle = z.color;
+    ctx.globalAlpha = 0.7;
+    ctx.fillText(z.label, zx, zy);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
   ctx.restore();
+}
+
+function drawStakeholderAvatars(cx, cy) {
+  const scene = state.round?.scene || SCENES[state.roundIndex];
+  if (!scene) return;
+  const stakeholders = scene.stakeholders.map(stakeholderById).filter(Boolean);
+  if (!stakeholders.length) return;
+
+  const discColors = { D: "#ff3366", i: "#ffb700", S: "#00d4aa", C: "#6b8afd" };
+  const avatarR = 20;
+  const spacing = 70;
+  const startX = cx - ((stakeholders.length - 1) * spacing) / 2;
+
+  ctx.textAlign = "center";
+
+  for (let i = 0; i < stakeholders.length; i++) {
+    const st = stakeholders[i];
+    const ax = startX + i * spacing;
+    const color = discColors[st.disc] || "#6b8afd";
+
+    ctx.beginPath();
+    ctx.arc(ax, cy, avatarR, 0, 2 * Math.PI);
+    ctx.fillStyle = color + "33";
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.font = "800 16px Instrument Sans";
+    ctx.textBaseline = "middle";
+    ctx.fillText(st.name.charAt(0), ax, cy);
+
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.font = "700 10px Instrument Sans";
+    ctx.textBaseline = "top";
+    ctx.fillText(st.name, ax, cy + avatarR + 6);
+
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = "600 9px Instrument Sans";
+    ctx.fillText(st.role, ax, cy + avatarR + 20);
+  }
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawTimer(cx, cy) {
+  if (!state.round) return;
+  const secondsLeft = state.round.secondsLeft;
+  const text = formatTimer(secondsLeft);
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.font = "900 48px Fraunces";
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+
+  if (secondsLeft < 15) {
+    if (!prefersReducedMotion()) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 200);
+      ctx.shadowColor = "#ff3366";
+      ctx.shadowBlur = 20 + pulse * 20;
+    } else {
+      ctx.shadowColor = "#ff3366";
+      ctx.shadowBlur = 20;
+    }
+  } else if (secondsLeft < 30) {
+    ctx.shadowColor = "#ffb700";
+    ctx.shadowBlur = 15;
+  }
+
+  ctx.fillText(text, cx, cy);
+  ctx.shadowBlur = 0;
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.restore();
+}
+
+function drawRoundDots(cx, cy) {
+  const total = SCENES.length;
+  const current = state.roundIndex;
+  const dotR = 5;
+  const spacing = 18;
+  const startX = cx - ((total - 1) * spacing) / 2;
+
+  for (let i = 0; i < total; i++) {
+    const dx = startX + i * spacing;
+    ctx.beginPath();
+    ctx.arc(dx, cy, dotR, 0, 2 * Math.PI);
+
+    if (i < current) {
+      ctx.fillStyle = "rgba(0,212,170,0.8)";
+    } else if (i === current) {
+      ctx.fillStyle = "#ffb700";
+    } else {
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+    }
+    ctx.fill();
+  }
+}
+
+function showMeterNotification(meterName, delta) {
+  if (prefersReducedMotion()) return;
+  const container = $("#meter-notifications");
+  if (!container) return;
+
+  const el = document.createElement("div");
+  el.className = `meter-notification meter-notification--${delta >= 0 ? "positive" : "negative"}`;
+  el.textContent = `${delta >= 0 ? "+" : ""}${Math.round(delta)}`;
+
+  const gaugePositions = {
+    sharedModelStability: 0,
+    visionIntegrity: 1,
+    stakeholderConfidence: 2,
+    systemHealth: 3,
+    burnRate: 4,
+  };
+  const idx = gaugePositions[meterName];
+  if (idx !== undefined) {
+    const canvasRect = canvas.getBoundingClientRect();
+    const spacing = Math.min(canvasRect.width / 6, 160);
+    const gaugeX = canvasRect.width / 2 - ((4) * spacing) / 2 + idx * spacing;
+    el.style.left = gaugeX + "px";
+    el.style.top = "80px";
+  }
+
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
 }
 
 function roundRect(c, x, y, w, h, r) {

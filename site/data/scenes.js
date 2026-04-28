@@ -104,5 +104,47 @@ export const SCENES = [
     ],
     constraints: ["Whole-of-life considerations", "Demo credibility", "Sustainment cost"],
   },
+  {
+    id: "trust_deficit",
+    title: "The Trust Deficit",
+    phase: "Public Incident",
+    setup: "A drone malfunction during a live public demonstration has gone viral. Social media is amplifying every detail. The team must respond while maintaining model coherence — panic will make it worse.",
+    system_context: "A drone lost GPS lock during a ministerial demo and executed an emergency landing in a populated area. No injuries, but footage has 2M+ views. Public trust in the system is collapsing.",
+    stakeholders: ["comms_i", "safety_s", "ops_d"],
+    injections: [
+      { at_s: 30, window: 10, from: "comms_i", line: "The media narrative is out of control. We need a coherent public statement anchored to our vision — now." },
+      { at_s: 60, window: 10, from: "safety_s", line: "The emergency landing protocol worked perfectly. Why isn't anyone talking about that?" },
+      { at_s: 90, window: 10, from: "ops_d", line: "Stop managing perception and fix the GPS integration. What's the 48-hour action?" },
+    ],
+    constraints: ["Public trust is fragile", "Regulatory investigation imminent", "Demo credibility at stake", "Must not appear defensive"],
+  },
+  {
+    id: "scope_creep_avalanche",
+    title: "The Scope Creep Avalanche",
+    phase: "Requirements Evolution",
+    setup: "Five seemingly minor scope additions have accumulated over three sprints. Individually each seems harmless, but together they threaten the shared model's coherence, budget, and timeline.",
+    system_context: "Stakeholders have added: thermal imaging, multi-language UI, maritime radar integration, real-time weather overlay, and automated compliance reporting. None were in the original scope but all have champions.",
+    stakeholders: ["finance_c", "comms_i", "safety_s"],
+    injections: [
+      { at_s: 30, window: 10, from: "finance_c", line: "Each addition seemed small, but the cumulative budget impact is 40%. Show me the boundary." },
+      { at_s: 60, window: 10, from: "comms_i", line: "Three different stakeholders are telling three different stories about what we're building. Align the narrative." },
+      { at_s: 90, window: 10, from: "safety_s", line: "Maritime radar integration has safety implications nobody evaluated. We need a proper impact assessment." },
+    ],
+    constraints: ["Budget capped at original +15%", "No safety compromises", "Must maintain coherent scope narrative", "Champion stakeholders are influential"],
+  },
+  {
+    id: "knowledge_gap",
+    title: "The Knowledge Gap",
+    phase: "Team Transition",
+    setup: "The lead systems engineer — who held the institutional knowledge for the dispatch integration — has resigned. Two weeks notice. The shared model must capture what's in their head before it walks out the door.",
+    system_context: "Dr. Chen designed the original dispatch architecture, owns the integration test strategy, and maintains the stakeholder relationship with the regulator. Their departure creates a critical knowledge vacuum across multiple model fields.",
+    stakeholders: ["safety_s", "finance_c", "ops_d"],
+    injections: [
+      { at_s: 30, window: 10, from: "safety_s", line: "Dr. Chen's safety case documentation is incomplete. If we can't transfer that knowledge, we lose regulatory approval." },
+      { at_s: 60, window: 10, from: "finance_c", line: "Replacing institutional knowledge costs 3-5x the salary. What's our knowledge preservation KPI?" },
+      { at_s: 90, window: 10, from: "ops_d", line: "Field teams trust Dr. Chen personally. How do we transfer that trust to the model and the process?" },
+    ],
+    constraints: ["Two-week transition window", "Regulatory continuity required", "No single point of failure going forward", "Must document tacit knowledge"],
+  },
 ];
 

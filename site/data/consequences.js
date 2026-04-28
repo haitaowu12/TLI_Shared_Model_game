@@ -28,5 +28,18 @@ export const CONSEQUENCES = {
       burnRate: +10,
     },
   },
+  tactical_debt_accumulation: {
+    id: "tactical_debt_accumulation",
+    title: "Tactical Debt Accumulation",
+    desc: "Accumulated Mode A responses have created hidden dependencies and fragile integrations. The system is brittle.",
+    effects: {
+      sharedModelStability: -6,
+      systemHealth: -8,
+      burnRate: +8,
+    },
+    persistent: {
+      burnMultiplier: 1.1,
+    },
+  },
 };
 

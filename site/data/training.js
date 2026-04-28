@@ -14,10 +14,10 @@ export const TRAINING_STEPS = [
   {
     step: 1,
     title: "Selecting Response Modes (A/B/C)",
-    instruction: "Choose your response mode. Mode A is quick but tactical. Mode C is thorough but takes more time.",
+    instruction: "Choose your response mode. Mode A is quick but tactical. Mode C is thorough but takes more time. Mode C now uses a step-by-step stepper — complete one section at a time.",
     action: "select-mode",
     recommendedMode: "C",
-    explanation: "Mode C requires tagging all sections but gives best results",
+    explanation: "Mode C uses a progressive stepper. Complete each section (text + tags) and it auto-advances to the next. You can click any section header to navigate directly.",
     continueButton: null,
     reward: {
       message: "Perfect! Mode C helps you maintain strategic coherence.",
@@ -40,7 +40,7 @@ export const TRAINING_STEPS = [
   {
     step: 3,
     title: "Handling Stakeholder Interrupts",
-    instruction: "Stakeholders will interrupt with urgent requests. Pause, read their message, and include their required tag.",
+    instruction: "Stakeholders will interrupt with urgent requests. Pause, read their message, and include their required tag. You'll hear a notification sound when stakeholders interrupt — each DiSC type has a distinct tone.",
     action: "handle-interrupt",
     simulatedInterrupt: {
       from: "ops_d",
@@ -56,12 +56,12 @@ export const TRAINING_STEPS = [
   {
     step: 4,
     title: "Reading Debrief Feedback",
-    instruction: "After each round, review your debrief. It shows tag coverage, meter changes, and areas to improve.",
+    instruction: "After each round, review your enhanced debrief. It now includes visual meter delta bars, a tag coverage radar chart, stakeholder alignment scores, and actionable recommendations.",
     action: "review-debrief",
     mockDebrief: {
       tagCoverage: "85%",
-      meterChanges: "All meters improved!",
-      feedback: "Excellent work! You're ready for the real challenge."
+      meterChanges: "Visual delta bars show before/after values for each meter",
+      feedback: "Excellent work! Your debrief now includes stakeholder alignment scores and a radar chart showing tag coverage across model categories."
     },
     continueButton: "Complete Training",
     reward: {

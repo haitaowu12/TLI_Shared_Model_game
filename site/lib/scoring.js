@@ -115,6 +115,7 @@ export function computeRoundDeltas({
   persistentMods,
   requiredTags = [],
   difficulty = "standard",
+  adaptiveModifiers = null,
 }) {
   const allTags = uniq(
     Object.values(tagsBySection || {})
@@ -211,6 +212,16 @@ export function computeRoundDeltas({
   if (mode === MODES.A && modeACountTotal + 1 === 3) {
     triggers.push("rework_cascade");
     notes.push("trigger_rework_cascade");
+  }
+
+  if (adaptiveModifiers?.pressureDirection === "down") {
+    for (const key of Object.keys(base)) {
+      if (base[key] < 0) base[key] = Math.round(base[key] * 0.7);
+    }
+  } else if (adaptiveModifiers?.pressureDirection === "up") {
+    for (const key of Object.keys(base)) {
+      if (base[key] < 0) base[key] = Math.round(base[key] * 1.15);
+    }
   }
 
   return { deltas: base, notes, triggers, tagCoverage, allTags };

@@ -14,6 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap"
       rel="stylesheet"
     />
+    <style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -30,17 +31,30 @@
           <button id="btn-canvas" class="btn btn--ghost" type="button">Canvas</button>
           <button id="btn-glossary" class="btn btn--ghost" type="button">Glossary</button>
           <button id="btn-help" class="btn btn--ghost" type="button">Help</button>
+          <button id="btn-audio" class="btn btn--ghost" type="button" aria-label="Toggle audio">
+            <span class="audio-icon">🔊</span><span class="audio-text">Sound</span>
+          </button>
           <button id="btn-fullscreen" class="btn btn--ghost" type="button" aria-label="Toggle fullscreen">
             <span class="fullscreen-icon">⛶</span>
             <span class="fullscreen-text">Fullscreen (F)</span>
           </button>
           <button id="btn-reset" class="btn btn--ghost" type="button">Reset</button>
+          <button id="btn-cb-mode" class="btn btn--ghost" type="button" aria-label="Toggle colorblind mode" aria-pressed="false">
+            <span class="cb-icon">👁</span><span class="cb-text">CB Mode</span>
+          </button>
         </div>
       </header>
 
+      <div id="aria-meter-changes" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <div id="aria-timer-updates" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <div id="aria-interrupt-alerts" class="sr-only" role="alert" aria-atomic="true"></div>
+
       <main class="layout">
+        <div id="round-overlay" class="round-overlay" hidden aria-hidden="true"></div>
+        <div id="pressure-indicator" class="pressure-indicator" hidden aria-hidden="true"></div>
         <section class="stage" aria-label="Game stage">
           <canvas id="game-canvas" width="960" height="640"></canvas>
+          <div id="meter-notifications" class="meter-notifications" aria-hidden="true"></div>
           <div class="stage__hint" id="stage-hint" aria-live="polite"></div>
         </section>
 

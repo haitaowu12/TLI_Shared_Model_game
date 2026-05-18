@@ -7,7 +7,7 @@ test("self-guided training flow reaches debrief", async ({ page }) => {
   });
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Begin scenario" }).click();
+  await page.getByRole("button", { name: "Start guided scenario" }).click();
   await page.getByRole("button", { name: "Start response" }).click();
 
   await page.getByLabel("Purpose Anchor").fill("The vision remains faster rural emergency response without giving up safety, trust, or regulatory confidence.");
@@ -23,11 +23,11 @@ test("self-guided training flow reaches debrief", async ({ page }) => {
   await page.locator("article").filter({ hasText: "Boundary Statement" }).getByRole("button", { name: "Logistical Constraints" }).click();
 
   await page.getByLabel("Lifecycle Impact").fill("The team protects median response time, demo uptime, training load, and current integration stability.");
-  await page.locator("article").filter({ hasText: "Lifecycle Impact" }).getByRole("button", { name: "KPIs" }).click();
+  await page.locator("article").filter({ hasText: "Lifecycle Impact" }).getByRole("button", { name: "Key Performance Indicators" }).click();
 
   await page.getByLabel("Stakeholder Message").fill("Operations, public trust, and finance get one message and one escalation path for model alignment.");
   await page.locator("article").filter({ hasText: "Stakeholder Message" }).getByRole("button", { name: "Team Governance" }).click();
-  await page.locator("article").filter({ hasText: "Stakeholder Message" }).getByRole("button", { name: "External Stakeholders" }).click();
+  await page.locator("article").filter({ hasText: "Stakeholder Message" }).getByRole("button", { name: "External Stakeholder Context" }).click();
 
   await page.getByRole("button", { name: "Add anchors" }).first().click();
   await page.getByRole("button", { name: "Add anchors" }).nth(1).click();

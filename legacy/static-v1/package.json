@@ -1,0 +1,9 @@
+{
+  "name": "shared-model-under-pressure",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "cd site && python3 -m http.server 5173"
+  }
+}

@@ -1,7 +1,11 @@
-node_modules/
+node_modules
+dist
+coverage
+test-results
+playwright-report
 .DS_Store
-*.log
-.trae/
+*.tsbuildinfo
+node_modules/
 .codex/
 .openai/
 output/playwright/

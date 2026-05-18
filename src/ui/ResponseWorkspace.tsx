@@ -38,6 +38,7 @@ export function ResponseWorkspace({
           </p>
           <h1>{round.title}</h1>
           <p className="scenario-copy">{round.pressure}</p>
+          <p className="learning-goal">{round.learningGoal}</p>
         </div>
         <MeterStack meters={session.meters} />
       </section>

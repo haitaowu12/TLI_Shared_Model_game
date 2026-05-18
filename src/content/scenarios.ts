@@ -6,10 +6,10 @@ export const scenarios: Scenario[] = [
     title: "The Smoke-Blind Manager",
     phase: "Early Deployment",
     setup:
-      "Three parallel defects appear during integration. Standups are turning into pure defect tracking. The team language is losing the why.",
+      "Three parallel defects appear during integration. Standups are turning into pure defect tracking. The team language is losing the why, and quieter disciplines are starting to hold back weak signals.",
     context:
-      "National emergency drone response network. Goal: reduce rural emergency response time by 30% while maintaining regulatory compliance and public trust.",
-    stakeholders: ["ops_d", "comms_i", "finance_c"],
+      "National emergency drone response network. Goal: reduce rural emergency response time by 30% while maintaining regulatory compliance, public trust, and enough psychological safety for the team to keep surfacing bad news early.",
+    stakeholders: ["ops_d", "comms_i", "finance_c", "safety_s"],
     interrupts: [
       {
         id: "ops-defect-drift",
@@ -33,12 +33,13 @@ export const scenarios: Scenario[] = [
         requiredTags: ["kpis", "logistical_constraints"],
       },
     ],
-    constraints: ["Budget capped", "Regulatory compliance required", "Public trust is sensitive"],
+    constraints: ["Budget capped", "Regulatory compliance required", "Public trust is sensitive", "Team voice quality is degrading"],
     successCriteria: [
       "Name one 48-hour action owner.",
       "Protect the vision and public-trust rationale.",
       "State the boundary between containment and redesign.",
       "Tie the response to at least one KPI or current-state fact.",
+      "Keep the team safe enough to surface dissenting evidence.",
     ],
   },
 ];

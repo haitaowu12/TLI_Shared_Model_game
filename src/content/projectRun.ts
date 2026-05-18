@@ -4,6 +4,7 @@ export const projectRounds: ProjectRound[] = [
   {
     id: "defect-drift",
     title: "Defect Drift",
+    learningGoal: "Use the canvas to keep current-state facts, strategy, ownership, and governance visible before defect pressure narrows the conversation.",
     stakeholderId: "ops_d",
     pressure:
       "Three defects have taken over standup. The project is moving, but the team no longer agrees what the movement is for.",
@@ -74,6 +75,7 @@ export const projectRounds: ProjectRound[] = [
   {
     id: "public-trust",
     title: "Public Trust Shock",
+    learningGoal: "Turn stakeholder pressure into one model-based story: vision, rationale, external context, and success criteria.",
     stakeholderId: "comms_i",
     pressure:
       "Media asks whether the emergency response network is unsafe. Internal teams are preparing different answers.",
@@ -144,6 +146,7 @@ export const projectRounds: ProjectRound[] = [
   {
     id: "budget-kpi",
     title: "Budget And KPI Pressure",
+    learningGoal: "Separate protected measures, constraints, scope, and reusable learning so cost pressure does not collapse into tactical churn.",
     stakeholderId: "finance_c",
     pressure:
       "Budget burn is rising before the ministerial demo. Finance wants to know which KPI is protected and what is out of scope.",
@@ -208,6 +211,78 @@ export const projectRounds: ProjectRound[] = [
         supports: ["vision"],
         risks: ["logistical_constraints", "team_governance", "scope"],
         meterDeltas: { visionIntegrity: 2, burnRate: 10, systemHealth: -5, stakeholderConfidence: -3 },
+      },
+    ],
+  },
+  {
+    id: "safety-fault-line",
+    title: "Psychological Safety Fault Line",
+    learningGoal:
+      "Protect the team's ability to raise weak signals by balancing leadership style, explicit accountability, and model-based success criteria.",
+    stakeholderId: "safety_s",
+    pressure:
+      "A decisive architect is closing the review quickly. Two disciplines have stopped challenging assumptions after sharp pushback.",
+    prompt: "Use the Shared Model to reopen safe contribution without losing delivery control.",
+    focusFields: ["internal_stakeholders", "team_governance", "accountable", "success_criteria"],
+    cards: [
+      {
+        id: "card-quiet-discipline",
+        roundId: "safety-fault-line",
+        title: "Quiet discipline",
+        body: "The training representative has stopped raising edge cases after two concerns were challenged in front of the room.",
+        source: "Safety observation",
+        stakeholderId: "safety_s",
+        idealFields: ["internal_stakeholders", "team_governance"],
+      },
+      {
+        id: "card-style-clash",
+        roundId: "safety-fault-line",
+        title: "Style clash",
+        body: "The architecture lead wants proof for every concern; the field lead needs a no-blame path for weak signals.",
+        source: "Leadership style check",
+        idealFields: ["team_governance", "rationale"],
+      },
+      {
+        id: "card-decision-rights",
+        roundId: "safety-fault-line",
+        title: "Decision rights unclear",
+        body: "The team agrees a 24-hour safety reset may be needed, but nobody owns whether the demo boundary changes.",
+        source: "Project room",
+        idealFields: ["accountable", "scope"],
+      },
+      {
+        id: "card-safety-success",
+        roundId: "safety-fault-line",
+        title: "Safety success signal",
+        body: "A useful reset should end with one protected success condition and a visible channel for dissenting evidence.",
+        source: "Psychological safety review",
+        idealFields: ["success_criteria", "resources_knowledge"],
+      },
+    ],
+    actions: [
+      {
+        id: "force-final-alignment",
+        label: "Force final alignment",
+        description: "Close the review now and ask silent disciplines to bring evidence later.",
+        supports: ["accountable", "success_criteria"],
+        risks: ["team_governance", "internal_stakeholders", "resources_knowledge"],
+        meterDeltas: { sharedModelStability: -6, stakeholderConfidence: -5, systemHealth: 2, burnRate: -2 },
+      },
+      {
+        id: "style-aware-reset",
+        label: "Run style-aware safety reset",
+        description: "Name the accountable owner, protect dissenting evidence, and turn the reset into a model update.",
+        supports: ["internal_stakeholders", "team_governance", "accountable", "success_criteria"],
+        risks: [],
+        meterDeltas: { sharedModelStability: 6, visionIntegrity: 2, stakeholderConfidence: 4, systemHealth: 5 },
+      },
+      {
+        id: "keep-conflict-informal",
+        label: "Keep conflict informal",
+        description: "Let leads smooth it over offline so the demo cadence is not disrupted.",
+        supports: ["internal_stakeholders"],
+        risks: ["accountable", "success_criteria", "resources_knowledge"],
+        meterDeltas: { stakeholderConfidence: -3, sharedModelStability: -4, burnRate: 1, systemHealth: -2 },
       },
     ],
   },

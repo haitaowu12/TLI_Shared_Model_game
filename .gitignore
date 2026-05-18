@@ -1,4 +1,7 @@
-node_modules/
+node_modules
+dist
+coverage
+test-results
+playwright-report
 .DS_Store
-*.log
-.trae/
+*.tsbuildinfo

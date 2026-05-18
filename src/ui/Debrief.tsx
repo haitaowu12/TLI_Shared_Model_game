@@ -1,9 +1,9 @@
+import { allProjectCards } from "../content/projectRun";
 import { fieldLabel } from "../content/sharedModel";
-import { stakeholderById } from "../content/stakeholders";
 import { modeLabels } from "../domain/scoring";
 import { exportSession } from "../persistence/sessionStorage";
 import { MeterStack } from "../rendering/MeterStack";
-import { SharedModelBoard } from "../rendering/SharedModelBoard";
+import { SharedModelPlayfield } from "../rendering/SharedModelPlayfield";
 import type { GameSession } from "../types";
 
 export function Debrief({
@@ -18,6 +18,12 @@ export function Debrief({
   if (!session.debrief) return null;
   const debrief = session.debrief;
   const passed = debrief.rubric.filter((result) => result.passed).length;
+  const finalOutcome = debrief.finalOutcome ?? {
+    title: passed >= 5 ? "Model discipline held" : "Model gaps visible",
+    tone: "mixed" as const,
+    summary: "The run surfaced which parts of the Shared Model were visible and which stayed implicit.",
+  };
+  const heading = finalOutcome.title;
 
   function downloadExport() {
     const blob = new Blob([exportSession(session)], { type: "application/json" });
@@ -31,12 +37,13 @@ export function Debrief({
 
   return (
     <main className="debrief-screen">
-      <section className="debrief-hero">
+      <section className={`debrief-hero debrief-hero--${finalOutcome.tone}`}>
         <div>
-          <p className="eyebrow">Debrief</p>
-          <h1>{passed >= 5 ? "Model discipline held" : "Model gaps visible"}</h1>
+          <p className="eyebrow">Project outcome</p>
+          <h1>{heading}</h1>
+          <p>{finalOutcome.summary}</p>
           <p>
-            {debrief.scenarioTitle} / {modeLabels[debrief.mode]} / {debrief.allTags.length} model anchors used.
+            {debrief.scenarioTitle} / {modeLabels[debrief.mode]} / {debrief.allTags.length} model fields used.
           </p>
         </div>
         <div className="debrief-actions">
@@ -51,7 +58,31 @@ export function Debrief({
 
       <section className="debrief-grid">
         <article className="debrief-panel">
-          <h2>Rubric</h2>
+          <h2>Round impacts</h2>
+          <div className="rubric-list">
+            {debrief.roundOutcomes.map((outcome, index) => (
+              <div
+                className={
+                  outcome.missingFields.length === 0 && outcome.misplacedCardIds.length === 0
+                    ? "rubric-item rubric-item--pass"
+                    : "rubric-item"
+                }
+                key={outcome.roundId}
+              >
+                <strong>
+                  Round {index + 1}: {outcome.title}
+                </strong>
+                <span>{outcome.consequence}</span>
+                {outcome.missingFields.length > 0 && (
+                  <small>Weak fields: {outcome.missingFields.map(fieldLabel).join(", ")}</small>
+                )}
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="debrief-panel">
+          <h2>Model field diagnosis</h2>
           <div className="rubric-list">
             {debrief.rubric.map((item) => (
               <div className={item.passed ? "rubric-item rubric-item--pass" : "rubric-item"} key={item.id}>
@@ -62,25 +93,6 @@ export function Debrief({
                 )}
               </div>
             ))}
-          </div>
-        </article>
-
-        <article className="debrief-panel">
-          <h2>Stakeholder alignment</h2>
-          <div className="stakeholder-score-list">
-            {debrief.stakeholderScores.map((score) => {
-              const stakeholder = stakeholderById(score.stakeholderId);
-              return (
-                <div className="stakeholder-score" key={score.stakeholderId}>
-                  <div>
-                    <strong>{stakeholder.name}</strong>
-                    <span>{stakeholder.role}</span>
-                  </div>
-                  <b>{score.score}</b>
-                  <small>{score.matchedTags.map(fieldLabel).join(", ") || "No strong matches"}</small>
-                </div>
-              );
-            })}
           </div>
         </article>
 
@@ -103,10 +115,12 @@ export function Debrief({
         </article>
       </section>
 
-      <SharedModelBoard
-        selectedTags={debrief.allTags}
-        requiredTags={session.response.requiredInterruptTags}
-        missedTags={debrief.missedAnchors}
+      <SharedModelPlayfield
+        assignments={session.boardAssignments}
+        cards={allProjectCards()}
+        focusFields={[]}
+        missedFields={debrief.missedAnchors}
+        readOnly
       />
     </main>
   );

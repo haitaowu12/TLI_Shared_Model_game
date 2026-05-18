@@ -37,10 +37,10 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
         <h2>How the game works</h2>
         <ol>
           <li>Read a pressure scenario from a multidisciplinary project.</li>
-          <li>Write a response in five canvas moves: purpose, action, boundary, lifecycle impact, stakeholder message.</li>
-          <li>Use tags to show which Shared Model fields your response made explicit.</li>
-          <li>Handle stakeholder interruptions by bringing their concern back to the canvas.</li>
-          <li>Review the debrief to see which parts of the shared model were strong, weak, or missing.</li>
+          <li>Place evidence cards directly into the Shared Model fields they clarify.</li>
+          <li>Choose a project action after deciding which fields to protect.</li>
+          <li>Watch the project meters move as stakeholder pressure hits the model.</li>
+          <li>Review the debrief to see which field choices changed the project outcome.</li>
         </ol>
       </section>
 

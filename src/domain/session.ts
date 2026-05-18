@@ -1,12 +1,16 @@
 import { activeScenario } from "../content/scenarios";
+import { projectRounds } from "../content/projectRun";
+import { scenarioById } from "../content/scenarios";
 import { stakeholderById } from "../content/stakeholders";
 import type { FieldId, GameEvent, GamePhase, GameSession, ResponseMode, ResponseSectionId } from "../types";
 import {
   applyDeltas,
   buildDebriefReport,
+  buildProjectDebriefReport,
   computeMeterDeltas,
   createEmptySubmission,
   defaultMeters,
+  evaluateRound,
   scoreStakeholderAlignment,
   validateInterrupts,
   validateSubmission,
@@ -18,6 +22,11 @@ export type SessionAction =
   | { type: "SET_MODE"; mode: ResponseMode }
   | { type: "UPDATE_SECTION_TEXT"; sectionId: ResponseSectionId; text: string }
   | { type: "TOGGLE_TAG"; sectionId: ResponseSectionId; tag: FieldId }
+  | { type: "SELECT_CARD"; cardId?: string }
+  | { type: "ASSIGN_CARD"; cardId: string; fieldId: FieldId }
+  | { type: "UNASSIGN_CARD"; cardId: string }
+  | { type: "SELECT_PROJECT_ACTION"; actionId: string }
+  | { type: "ADVANCE_ROUND" }
   | { type: "ACKNOWLEDGE_INTERRUPT"; interruptId: string }
   | { type: "ADD_INTERRUPT_TAGS"; interruptId: string; sectionId: ResponseSectionId }
   | { type: "SUBMIT_RESPONSE" }
@@ -41,7 +50,7 @@ function makeEvent(label: string, detail: string): GameEvent {
 export function createInitialSession(phase: GamePhase = "onboarding"): GameSession {
   const timestamp = now();
   return {
-    version: 2,
+    version: 3,
     phase,
     scenarioId: activeScenario().id,
     createdAt: timestamp,
@@ -49,6 +58,11 @@ export function createInitialSession(phase: GamePhase = "onboarding"): GameSessi
     meters: { ...defaultMeters },
     previousMeters: { ...defaultMeters },
     response: createEmptySubmission(),
+    currentRoundIndex: 0,
+    boardAssignments: [],
+    selectedCardId: undefined,
+    selectedActionId: undefined,
+    roundOutcomes: [],
     debrief: null,
     autosaveStatus: "idle",
     eventLog: [makeEvent("Session created", "Self-guided Shared Model training initialized.")],
@@ -70,7 +84,20 @@ export function sessionReducer(session: GameSession, action: SessionAction): Gam
       return withUpdate(session, { phase: "briefing" }, makeEvent("Onboarding complete", "Player reviewed model discipline."));
 
     case "START_RESPONSE":
-      return withUpdate(session, { phase: "responding" }, makeEvent("Scenario started", activeScenario().title));
+      return withUpdate(
+        session,
+        {
+          phase: "responding",
+          currentRoundIndex: 0,
+          boardAssignments: [],
+          selectedCardId: undefined,
+          selectedActionId: undefined,
+          roundOutcomes: [],
+          previousMeters: session.meters,
+          debrief: null,
+        },
+        makeEvent("Scenario started", scenarioById(session.scenarioId).title),
+      );
 
     case "SET_MODE":
       return withUpdate(session, {
@@ -108,8 +135,85 @@ export function sessionReducer(session: GameSession, action: SessionAction): Gam
       });
     }
 
+    case "SELECT_CARD":
+      return withUpdate(session, { selectedCardId: action.cardId });
+
+    case "ASSIGN_CARD": {
+      const round = projectRounds[session.currentRoundIndex];
+      if (!round || !round.cards.some((card) => card.id === action.cardId)) return session;
+
+      return withUpdate(session, {
+        selectedCardId: undefined,
+        boardAssignments: [
+          ...session.boardAssignments.filter((assignment) => assignment.cardId !== action.cardId),
+          { cardId: action.cardId, fieldId: action.fieldId, roundId: round.id },
+        ],
+      });
+    }
+
+    case "UNASSIGN_CARD":
+      return withUpdate(session, {
+        boardAssignments: session.boardAssignments.filter((assignment) => assignment.cardId !== action.cardId),
+      });
+
+    case "SELECT_PROJECT_ACTION":
+      return withUpdate(session, { selectedActionId: action.actionId });
+
+    case "ADVANCE_ROUND": {
+      const round = projectRounds[session.currentRoundIndex];
+      if (!round) return session;
+
+      const actionId = session.selectedActionId ?? round.actions[0]?.id;
+      if (!actionId) return session;
+
+      const outcome = evaluateRound(round, session.boardAssignments, actionId);
+      const nextMeters = applyDeltas(session.meters, outcome.meterDeltas);
+      const roundOutcomes = [
+        ...session.roundOutcomes.filter((candidate) => candidate.roundId !== outcome.roundId),
+        outcome,
+      ];
+      const isFinalRound = session.currentRoundIndex >= projectRounds.length - 1;
+
+      if (isFinalRound) {
+        const scenario = scenarioById(session.scenarioId);
+        const debrief = buildProjectDebriefReport({
+          scenario,
+          assignments: session.boardAssignments,
+          roundOutcomes,
+          previousMeters: session.previousMeters,
+          nextMeters,
+          transferAction: session.debrief?.transferAction,
+        });
+
+        return withUpdate(
+          session,
+          {
+            phase: "debrief",
+            meters: nextMeters,
+            roundOutcomes,
+            selectedCardId: undefined,
+            selectedActionId: undefined,
+            debrief,
+          },
+          makeEvent("Project run complete", debrief.finalOutcome.title),
+        );
+      }
+
+      return withUpdate(
+        session,
+        {
+          meters: nextMeters,
+          currentRoundIndex: session.currentRoundIndex + 1,
+          selectedCardId: undefined,
+          selectedActionId: undefined,
+          roundOutcomes,
+        },
+        makeEvent("Project advanced", outcome.summary),
+      );
+    }
+
     case "ACKNOWLEDGE_INTERRUPT": {
-      const interrupt = activeScenario().interrupts.find((candidate) => candidate.id === action.interruptId);
+      const interrupt = scenarioById(session.scenarioId).interrupts.find((candidate) => candidate.id === action.interruptId);
       if (!interrupt) return session;
       const requiredInterruptTags = Array.from(new Set([...session.response.requiredInterruptTags, ...interrupt.requiredTags]));
       const acknowledgedInterrupts = Array.from(new Set([...session.response.acknowledgedInterrupts, action.interruptId]));
@@ -122,7 +226,7 @@ export function sessionReducer(session: GameSession, action: SessionAction): Gam
     }
 
     case "ADD_INTERRUPT_TAGS": {
-      const interrupt = activeScenario().interrupts.find((candidate) => candidate.id === action.interruptId);
+      const interrupt = scenarioById(session.scenarioId).interrupts.find((candidate) => candidate.id === action.interruptId);
       if (!interrupt) return session;
       const current = session.response.sections[action.sectionId];
       const sectionTags = Array.from(new Set([...current.tags, ...interrupt.requiredTags]));
@@ -147,7 +251,7 @@ export function sessionReducer(session: GameSession, action: SessionAction): Gam
     }
 
     case "SUBMIT_RESPONSE": {
-      const scenario = activeScenario();
+      const scenario = scenarioById(session.scenarioId);
       const stakeholders = scenario.stakeholders.map(stakeholderById);
       const submission = { ...session.response, submittedAt: now() };
       const rubric = [...validateSubmission(submission), validateInterrupts(submission)];

@@ -1,11 +1,16 @@
 import { responseSections } from "../content/rubric";
+import { fieldLabel } from "../content/sharedModel";
 import type {
+  BoardAssignment,
   DebriefReport,
+  FinalOutcome,
   FieldId,
   Meters,
+  ProjectRound,
   ResponseMode,
   ResponseSectionId,
   ResponseSubmission,
+  RoundOutcome,
   RubricResult,
   Scenario,
   Stakeholder,
@@ -125,6 +130,146 @@ function zeroMeters(): Meters {
   };
 }
 
+function addMeterDeltas(base: Meters, patch: Partial<Meters>): Meters {
+  return {
+    sharedModelStability: base.sharedModelStability + (patch.sharedModelStability ?? 0),
+    visionIntegrity: base.visionIntegrity + (patch.visionIntegrity ?? 0),
+    stakeholderConfidence: base.stakeholderConfidence + (patch.stakeholderConfidence ?? 0),
+    systemHealth: base.systemHealth + (patch.systemHealth ?? 0),
+    burnRate: base.burnRate + (patch.burnRate ?? 0),
+  };
+}
+
+function uniqueFields(fields: FieldId[]): FieldId[] {
+  return Array.from(new Set(fields));
+}
+
+export function allAssignedFields(assignments: BoardAssignment[]): FieldId[] {
+  return uniqueFields(assignments.map((assignment) => assignment.fieldId));
+}
+
+export function evaluateRound(round: ProjectRound, assignments: BoardAssignment[], actionId: string): RoundOutcome {
+  const action = round.actions.find((candidate) => candidate.id === actionId) ?? round.actions[0];
+  const roundAssignments = assignments.filter((assignment) => assignment.roundId === round.id);
+  const cardsById = new Map(round.cards.map((card) => [card.id, card]));
+  const assignedCardIds = new Set(roundAssignments.map((assignment) => assignment.cardId));
+  const upheldFields = new Set<FieldId>();
+  const misplacedCardIds: string[] = [];
+
+  for (const assignment of roundAssignments) {
+    const card = cardsById.get(assignment.cardId);
+    if (!card) continue;
+
+    if (card.idealFields.includes(assignment.fieldId)) {
+      upheldFields.add(assignment.fieldId);
+    } else {
+      misplacedCardIds.push(card.id);
+    }
+  }
+
+  const missingFields = round.focusFields.filter((field) => !upheldFields.has(field));
+  const unplacedCardIds = round.cards.filter((card) => !assignedCardIds.has(card.id)).map((card) => card.id);
+  const supportHits = action.supports.filter((field) => upheldFields.has(field)).length;
+  const unresolvedRisks = action.risks.filter((field) => !upheldFields.has(field)).length;
+  let meterDeltas = addMeterDeltas(zeroMeters(), action.meterDeltas);
+
+  meterDeltas = addMeterDeltas(meterDeltas, {
+    sharedModelStability: upheldFields.size * 3 + supportHits * 2 - missingFields.length * 4 - misplacedCardIds.length * 2,
+    stakeholderConfidence: upheldFields.size * 2 - missingFields.length * 3 - unresolvedRisks * 2,
+    systemHealth:
+      ["as_is_state", "strategy", "scope", "kpis"].filter((field) => upheldFields.has(field as FieldId)).length * 2 -
+      ["as_is_state", "strategy", "scope", "kpis"].filter((field) => missingFields.includes(field as FieldId)).length * 3,
+    burnRate: missingFields.length * 3 + misplacedCardIds.length * 2 + unplacedCardIds.length,
+  });
+
+  if (upheldFields.has("vision")) {
+    meterDeltas.visionIntegrity += 6;
+  } else if (round.focusFields.includes("vision") || action.risks.includes("vision")) {
+    meterDeltas.visionIntegrity -= 7;
+  }
+
+  if (missingFields.length === 0 && misplacedCardIds.length === 0) {
+    meterDeltas.sharedModelStability += 4;
+    meterDeltas.stakeholderConfidence += 2;
+  }
+
+  const upheld = uniqueFields([...upheldFields]);
+  const missingLabels = missingFields.map(fieldLabel).join(", ");
+  const upheldLabels = upheld.map(fieldLabel).join(", ");
+  const summary =
+    missingFields.length === 0
+      ? `${action.label} held the round together because the key model fields were explicit.`
+      : `${action.label} created movement, but ${missingLabels} stayed weak.`;
+  const consequence =
+    missingFields.length === 0
+      ? `Project confidence improved around ${upheldLabels || "the model"}; pressure became shared context instead of noise.`
+      : `The project absorbed the pressure, but the missing model anchors increased drift risk around ${missingLabels}.`;
+
+  return {
+    roundId: round.id,
+    title: round.title,
+    actionId: action.id,
+    actionLabel: action.label,
+    upheldFields: upheld,
+    missingFields,
+    misplacedCardIds,
+    unplacedCardIds,
+    meterDeltas,
+    summary,
+    consequence,
+  };
+}
+
+export function classifyFinalOutcome(meters: Meters, outcomes: RoundOutcome[]): FinalOutcome {
+  const missedCount = outcomes.reduce((sum, outcome) => sum + outcome.missingFields.length, 0);
+
+  if (
+    meters.sharedModelStability >= 82 &&
+    meters.visionIntegrity >= 78 &&
+    meters.stakeholderConfidence >= 72 &&
+    meters.burnRate <= 48
+  ) {
+    return {
+      title: "Aligned Recovery",
+      tone: "strong",
+      summary: "The team used the Shared Model as a working canvas, not a slogan. Pressure clarified the model instead of fragmenting it.",
+    };
+  }
+
+  if (meters.visionIntegrity < 62) {
+    return {
+      title: "Tactical Drift",
+      tone: "risk",
+      summary: "The project kept moving, but the why eroded. The next run should protect Vision and Rationale earlier.",
+    };
+  }
+
+  if (meters.stakeholderConfidence < 62) {
+    return {
+      title: "Stakeholder Fracture",
+      tone: "risk",
+      summary: "Internal movement and external confidence diverged. The next run should make stakeholder context and success criteria explicit.",
+    };
+  }
+
+  if (meters.burnRate > 68) {
+    return {
+      title: "Overloaded Delivery",
+      tone: "risk",
+      summary: "The model carried too many unresolved constraints. The next run should make Scope and Logistical Constraints sharper.",
+    };
+  }
+
+  return {
+    title: missedCount <= 3 ? "Sustainable Delivery" : "Partial Alignment",
+    tone: missedCount <= 3 ? "strong" : "mixed",
+    summary:
+      missedCount <= 3
+        ? "The team preserved enough of the Shared Model to keep delivery coherent under pressure."
+        : "The team found some useful anchors, but key model fields stayed implicit long enough to create avoidable churn.",
+  };
+}
+
 export function computeMeterDeltas(
   submission: ResponseSubmission,
   rubric: RubricResult[],
@@ -218,6 +363,53 @@ export function buildDebriefReport(params: {
     nextMeters: params.nextMeters,
     notes,
     transferAction: params.transferAction ?? "",
+    roundOutcomes: [],
+    finalOutcome: classifyFinalOutcome(params.nextMeters, []),
+  };
+}
+
+export function buildProjectDebriefReport(params: {
+  scenario: Scenario;
+  assignments: BoardAssignment[];
+  roundOutcomes: RoundOutcome[];
+  previousMeters: Meters;
+  nextMeters: Meters;
+  transferAction?: string;
+}): DebriefReport {
+  const missedAnchors = uniqueFields(params.roundOutcomes.flatMap((outcome) => outcome.missingFields));
+  const allTags = allAssignedFields(params.assignments);
+  const finalOutcome = classifyFinalOutcome(params.nextMeters, params.roundOutcomes);
+  const meterDeltas = {
+    sharedModelStability: params.nextMeters.sharedModelStability - params.previousMeters.sharedModelStability,
+    visionIntegrity: params.nextMeters.visionIntegrity - params.previousMeters.visionIntegrity,
+    stakeholderConfidence: params.nextMeters.stakeholderConfidence - params.previousMeters.stakeholderConfidence,
+    systemHealth: params.nextMeters.systemHealth - params.previousMeters.systemHealth,
+    burnRate: params.nextMeters.burnRate - params.previousMeters.burnRate,
+  };
+  const rubric: RubricResult[] = params.roundOutcomes.map((outcome, index) => ({
+    id: `round-${index + 1}`,
+    label: `Round ${index + 1}: ${outcome.title}`,
+    passed: outcome.missingFields.length === 0 && outcome.misplacedCardIds.length === 0,
+    missingTags: outcome.missingFields,
+    message: outcome.consequence,
+  }));
+
+  return {
+    id: crypto.randomUUID?.() ?? `debrief-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    scenarioTitle: params.scenario.title,
+    mode: "model_reframe",
+    rubric,
+    stakeholderScores: [],
+    allTags,
+    missedAnchors,
+    meterDeltas,
+    previousMeters: params.previousMeters,
+    nextMeters: params.nextMeters,
+    notes: params.roundOutcomes.map((outcome) => outcome.summary),
+    transferAction: params.transferAction ?? "",
+    roundOutcomes: params.roundOutcomes,
+    finalOutcome,
   };
 }
 

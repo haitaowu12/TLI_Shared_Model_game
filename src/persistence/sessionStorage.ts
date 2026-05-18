@@ -1,8 +1,13 @@
 import { createInitialSession } from "../domain/session";
 import type { GameSession } from "../types";
 
-export const STORAGE_KEY = "shared-model-game-session-v2";
-export const LEGACY_KEYS = ["sharedModelGame_state", "sharedModelGame_trainingCompleted", "sharedModelGame_trainingStep"];
+export const STORAGE_KEY = "shared-model-game-session-v3";
+export const LEGACY_KEYS = [
+  "sharedModelGame_state",
+  "sharedModelGame_trainingCompleted",
+  "sharedModelGame_trainingStep",
+  "shared-model-game-session-v2",
+];
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -14,9 +19,11 @@ function isGameSession(value: unknown): value is GameSession {
   return Boolean(
     value &&
       typeof value === "object" &&
-      (value as GameSession).version === 2 &&
+      (value as GameSession).version === 3 &&
       (value as GameSession).response &&
-      (value as GameSession).meters,
+      (value as GameSession).meters &&
+      Array.isArray((value as GameSession).boardAssignments) &&
+      Array.isArray((value as GameSession).roundOutcomes),
   );
 }
 
@@ -35,7 +42,7 @@ export function migrateLegacySession(storage: StorageLike): GameSession | null {
         id: `legacy-${Date.now()}`,
         at: new Date().toISOString(),
         label: "Legacy state detected",
-        detail: "Static prototype progress was detected; new production session started cleanly.",
+        detail: "Prior worksheet progress was detected; new board-centered project run started cleanly.",
       },
     ],
   };
@@ -65,6 +72,7 @@ export function saveSession(session: GameSession, storage: StorageLike = window.
 
 export function clearSession(storage: StorageLike = window.localStorage): void {
   storage.removeItem(STORAGE_KEY);
+  storage.removeItem("shared-model-game-session-v2");
 }
 
 export function exportSession(session: GameSession): string {

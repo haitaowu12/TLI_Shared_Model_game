@@ -44,4 +44,36 @@ describe("session reducer", () => {
     expect(session.phase).toBe("debrief");
     expect(session.debrief?.scenarioTitle).toBe("The Smoke-Blind Manager");
   });
+
+  it("advances a board-centered project run into a project outcome", () => {
+    let session = createInitialSession("responding");
+
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-legacy-interface", fieldId: "as_is_state" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-owner-needed", fieldId: "responsible" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-containment-path", fieldId: "strategy" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-standup-drift", fieldId: "team_governance" });
+    session = sessionReducer(session, { type: "SELECT_PROJECT_ACTION", actionId: "reframe-standup" });
+    session = sessionReducer(session, { type: "ADVANCE_ROUND" });
+
+    expect(session.currentRoundIndex).toBe(1);
+    expect(session.roundOutcomes[0].missingFields).toEqual([]);
+
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-public-question", fieldId: "vision" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-why-now", fieldId: "rationale" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-community-impact", fieldId: "external_stakeholders" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-success-story", fieldId: "success_criteria" });
+    session = sessionReducer(session, { type: "SELECT_PROJECT_ACTION", actionId: "shared-story" });
+    session = sessionReducer(session, { type: "ADVANCE_ROUND" });
+
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-kpi-protected", fieldId: "kpis" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-budget-cap", fieldId: "logistical_constraints" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-scope-boundary", fieldId: "scope" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-decision-log", fieldId: "resources_knowledge" });
+    session = sessionReducer(session, { type: "SELECT_PROJECT_ACTION", actionId: "protect-kpi-boundary" });
+    session = sessionReducer(session, { type: "ADVANCE_ROUND" });
+
+    expect(session.phase).toBe("debrief");
+    expect(session.debrief?.roundOutcomes).toHaveLength(3);
+    expect(session.debrief?.finalOutcome.title).toMatch(/Aligned Recovery|Sustainable Delivery/);
+  });
 });

@@ -1,91 +1,140 @@
-import { responseSections } from "../content/rubric";
-import { allSelectedTags } from "../domain/scoring";
+import { projectRounds } from "../content/projectRun";
+import { fieldLabel } from "../content/sharedModel";
+import { stakeholderById } from "../content/stakeholders";
 import { MeterStack } from "../rendering/MeterStack";
-import { PressureTimeline } from "../rendering/PressureTimeline";
-import { SharedModelBoard } from "../rendering/SharedModelBoard";
-import type { FieldId, GameSession, ResponseMode, ResponseSectionId, Scenario } from "../types";
-import { InterruptPanel } from "./InterruptPanel";
-import { ModeSelector } from "./ModeSelector";
-import { TagPicker } from "./TagPicker";
+import { SharedModelPlayfield } from "../rendering/SharedModelPlayfield";
+import type { FieldId, GameSession, Scenario } from "../types";
 
 export function ResponseWorkspace({
   session,
   scenario,
-  onModeChange,
-  onTextChange,
-  onTagToggle,
-  onAddInterruptTags,
-  onSubmit,
+  onSelectCard,
+  onAssignCard,
+  onUnassignCard,
+  onSelectAction,
+  onAdvanceRound,
 }: {
   session: GameSession;
   scenario: Scenario;
-  onModeChange: (mode: ResponseMode) => void;
-  onTextChange: (sectionId: ResponseSectionId, text: string) => void;
-  onTagToggle: (sectionId: ResponseSectionId, tag: FieldId) => void;
-  onAddInterruptTags: (interruptId: string, sectionId: ResponseSectionId) => void;
-  onSubmit: () => void;
+  onSelectCard: (cardId?: string) => void;
+  onAssignCard: (cardId: string, fieldId: FieldId) => void;
+  onUnassignCard: (cardId: string) => void;
+  onSelectAction: (actionId: string) => void;
+  onAdvanceRound: () => void;
 }) {
-  const selectedTags = allSelectedTags(session.response);
+  const round = projectRounds[session.currentRoundIndex];
+  const stakeholder = stakeholderById(round.stakeholderId);
+  const placedCardIds = new Set(session.boardAssignments.map((assignment) => assignment.cardId));
+  const selectedAction = round.actions.find((action) => action.id === session.selectedActionId);
+  const lastOutcome = session.roundOutcomes.at(-1);
+  const isFinalRound = session.currentRoundIndex === projectRounds.length - 1;
 
   return (
-    <main className="workspace">
-      <section className="workspace__left">
-        <div className="workspace__topline">
-          <div>
-            <p className="eyebrow">{scenario.phase}</p>
-            <h1>{scenario.title}</h1>
-          </div>
-          <button className="primary-action primary-action--compact" type="button" onClick={onSubmit}>
-            Generate debrief
-          </button>
+    <main className="run-screen">
+      <section className="run-header">
+        <div>
+          <p className="eyebrow">
+            Round {session.currentRoundIndex + 1} / {projectRounds.length} · {scenario.phase}
+          </p>
+          <h1>{round.title}</h1>
+          <p className="scenario-copy">{round.pressure}</p>
         </div>
-        <p className="scenario-copy">{scenario.setup}</p>
-        <div className="instruction-panel">
-          <strong>What to do now</strong>
-          <span>
-            Fill each section as if you were making the team model visible. Select tags only when your words
-            actually address that part of the canvas. Interrupt anchors are stakeholder concerns you need to bring back
-            into the model.
-          </span>
-        </div>
-        <ModeSelector value={session.response.mode} onChange={onModeChange} />
-        <div className="response-sections">
-          {responseSections.map((section) => {
-            const response = session.response.sections[section.id];
-            const requiredTags = [...section.requiredTags, ...(section.alternativeTags ?? [])];
-            return (
-              <article className="response-card" key={section.id}>
-                <label htmlFor={section.id}>
-                  <strong>{section.label}</strong>
-                  <span>{section.prompt}</span>
-                </label>
-                <textarea
-                  id={section.id}
-                  value={response.text}
-                  rows={4}
-                  onChange={(event) => onTextChange(section.id, event.target.value)}
-                />
-                <TagPicker
-                  selected={response.tags}
-                  requiredTags={requiredTags}
-                  onToggle={(tag) => onTagToggle(section.id, tag)}
-                />
-              </article>
-            );
-          })}
-        </div>
+        <MeterStack meters={session.meters} />
       </section>
 
-      <aside className="workspace__right">
-        <MeterStack meters={session.meters} />
-        <SharedModelBoard selectedTags={selectedTags} requiredTags={session.response.requiredInterruptTags} />
-        <InterruptPanel
-          interrupts={scenario.interrupts}
-          acknowledgedInterrupts={session.response.acknowledgedInterrupts}
-          onAddTags={onAddInterruptTags}
+      <section className="run-stage">
+        <aside className="card-tray" aria-label="Evidence cards">
+          <div>
+            <p className="eyebrow">Pressure source</p>
+            <h2>{stakeholder.name}</h2>
+            <strong>{stakeholder.role}</strong>
+            <p>{round.prompt}</p>
+          </div>
+
+          <div className="evidence-stack">
+            {round.cards.map((card) => {
+              const placed = placedCardIds.has(card.id);
+              const selected = session.selectedCardId === card.id;
+              return (
+                <button
+                  aria-pressed={selected}
+                  className={[
+                    "evidence-card",
+                    selected ? "evidence-card--selected" : "",
+                    placed ? "evidence-card--placed" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  draggable
+                  key={card.id}
+                  type="button"
+                  onClick={() => onSelectCard(selected ? undefined : card.id)}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/plain", card.id);
+                    onSelectCard(card.id);
+                  }}
+                >
+                  <span>{placed ? "Placed" : "Evidence"}</span>
+                  <strong>{card.title}</strong>
+                  <p>{card.body}</p>
+                  <small>{card.source}</small>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <SharedModelPlayfield
+          assignments={session.boardAssignments}
+          cards={projectRounds.flatMap((item) => item.cards)}
+          focusFields={round.focusFields}
+          selectedCardId={session.selectedCardId}
+          onSelectCard={onSelectCard}
+          onAssignCard={onAssignCard}
+          onUnassignCard={onUnassignCard}
         />
-        <PressureTimeline scenario={scenario} acknowledgedInterrupts={session.response.acknowledgedInterrupts} />
-      </aside>
+
+        <aside className="decision-panel" aria-label="Project decision">
+          <div>
+            <p className="eyebrow">This round protects</p>
+            <div className="focus-list">
+              {round.focusFields.map((field) => (
+                <span key={field}>{fieldLabel(field)}</span>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h2>Choose project action</h2>
+            <div className="action-list">
+              {round.actions.map((action) => (
+                <button
+                  aria-pressed={session.selectedActionId === action.id}
+                  className={session.selectedActionId === action.id ? "action-option action-option--selected" : "action-option"}
+                  key={action.id}
+                  type="button"
+                  onClick={() => onSelectAction(action.id)}
+                >
+                  <strong>{action.label}</strong>
+                  <span>{action.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {lastOutcome && (
+            <article className="outcome-preview">
+              <p className="eyebrow">Last project impact</p>
+              <h2>{lastOutcome.title}</h2>
+              <p>{lastOutcome.consequence}</p>
+            </article>
+          )}
+
+          <button className="primary-action run-advance" disabled={!selectedAction} type="button" onClick={onAdvanceRound}>
+            {isFinalRound ? "Resolve project outcome" : "Advance project"}
+          </button>
+        </aside>
+      </section>
     </main>
   );
 }

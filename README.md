@@ -4,6 +4,8 @@ Production rebuild for the INCOSE TLI Shared Model training game.
 
 This version is a React + Vite + TypeScript app focused on self-guided practice: inspect a pressure scenario, write a model-anchored response, tag Shared Model fields, handle stakeholder interrupts, and generate a debrief with transfer action.
 
+The Shared Model content is grounded in `Paper-151.pdf`, especially the page 18 overview canvas. The game now teaches the canvas before play: Vision and Scope frame the work; stakeholder context bounds the sides; Rationale, As-is State, Strategy, Team Governance, and KPIs carry the working core; roles and Success Criteria clarify accountability; Logistical Constraints and Resources/Knowledge Management ground execution.
+
 ## Current Product Slice
 
 - One guided onboarding path

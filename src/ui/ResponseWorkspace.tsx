@@ -40,6 +40,14 @@ export function ResponseWorkspace({
           </button>
         </div>
         <p className="scenario-copy">{scenario.setup}</p>
+        <div className="instruction-panel">
+          <strong>What to do now</strong>
+          <span>
+            Fill each section as if you were making the team model visible. Select tags only when your words
+            actually address that part of the canvas. Interrupt anchors are stakeholder concerns you need to bring back
+            into the model.
+          </span>
+        </div>
         <ModeSelector value={session.response.mode} onChange={onModeChange} />
         <div className="response-sections">
           {responseSections.map((section) => {

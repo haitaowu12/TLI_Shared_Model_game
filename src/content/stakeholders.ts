@@ -24,7 +24,7 @@ export const stakeholders: Stakeholder[] = [
     pressures: ["Media scrutiny", "Misinformation", "Competing stakeholder messages"],
     systemRole: "Maintains the social license to operate.",
     rewards: { vision: 3, rationale: 2, external_stakeholders: 2, internal_stakeholders: 1, success_criteria: 1 },
-    dislikes: { tools_processes: 1 },
+    dislikes: { resources_knowledge: 1 },
     recommendedTags: ["vision", "rationale", "external_stakeholders"],
   },
   {
@@ -49,7 +49,7 @@ export const stakeholders: Stakeholder[] = [
     motivations: ["Sustainable funding model", "Transparent KPIs", "Avoid hidden costs"],
     pressures: ["Budget caps", "Audit requirements", "Unplanned rework costs"],
     systemRole: "Protects the effort from short-term decisions that create long-term liabilities.",
-    rewards: { kpis: 3, as_is_state: 2, logistical_constraints: 2, scope: 2, tools_processes: 1 },
+    rewards: { kpis: 3, as_is_state: 2, logistical_constraints: 2, scope: 2, resources_knowledge: 1 },
     dislikes: { external_stakeholders: 1 },
     recommendedTags: ["kpis", "logistical_constraints", "as_is_state"],
   },

@@ -165,7 +165,7 @@ p {
 h1 {
   max-width: 900px;
   margin-bottom: 16px;
-  font-size: clamp(2.4rem, 7vw, 6.8rem);
+  font-size: 5rem;
   line-height: 0.95;
   letter-spacing: 0;
 }
@@ -178,7 +178,7 @@ h2 {
 .hero-copy {
   max-width: 760px;
   color: #d8e1ee;
-  font-size: clamp(1.08rem, 2vw, 1.4rem);
+  font-size: 1.22rem;
   line-height: 1.6;
 }
 
@@ -198,11 +198,63 @@ h2 {
 }
 
 .step-grid,
+.primer-layout,
 .stakeholder-strip,
 .debrief-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.primer-layout {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.primer-card,
+.play-loop,
+.instruction-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.primer-card,
+.play-loop {
+  padding: 22px;
+}
+
+.research-question {
+  color: #d8e1ee;
+  font-weight: 750;
+}
+
+.primer-card p,
+.play-loop li,
+.barrier-list li,
+.instruction-panel span {
+  color: var(--muted);
+  line-height: 1.58;
+}
+
+.barrier-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.play-loop ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.start-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .step-card,
@@ -237,6 +289,15 @@ h2 {
 .stakeholder-score small {
   color: var(--muted);
   line-height: 1.52;
+}
+
+.instruction-panel {
+  display: grid;
+  gap: 6px;
+  margin: 18px 0;
+  padding: 14px;
+  border-color: rgba(49, 208, 170, 0.24);
+  background: rgba(49, 208, 170, 0.08);
 }
 
 .brief-layout {
@@ -331,7 +392,7 @@ h2 {
 
 .workspace__topline h1 {
   margin: 0;
-  font-size: clamp(1.8rem, 4vw, 3.5rem);
+  font-size: 2.7rem;
 }
 
 .mode-selector {
@@ -461,17 +522,24 @@ textarea {
 .model-board {
   padding: 14px;
   box-shadow: none;
+  overflow-x: auto;
 }
 
-.model-board__grid {
+.model-board__canvas {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(146px, 0.95fr) repeat(7, minmax(118px, 1fr)) minmax(146px, 0.95fr);
+  grid-template-areas:
+    "internal vision vision vision scope scope scope project external"
+    "internal rationale asis strategy governance kpis kpis project external"
+    "internal responsible responsible accountable accountable success success team external"
+    "internal constraints constraints constraints resources resources resources team external";
+  min-width: 1120px;
   gap: 8px;
   margin-top: 12px;
 }
 
 .model-field {
-  min-height: 112px;
+  min-height: 104px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
@@ -480,7 +548,8 @@ textarea {
 
 .model-field h3 {
   margin: 6px 0;
-  font-size: 0.93rem;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
 }
 
 .model-field p {
@@ -491,6 +560,17 @@ textarea {
 .model-field--selected {
   border-color: rgba(49, 208, 170, 0.78);
   background: rgba(49, 208, 170, 0.12);
+}
+
+.model-field--band {
+  background: rgba(49, 208, 170, 0.08);
+}
+
+.model-field--side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(216, 225, 238, 0.08);
 }
 
 .model-field--required {
@@ -582,7 +662,7 @@ textarea {
 
 .debrief-hero h1 {
   margin: 0 0 8px;
-  font-size: clamp(2rem, 5vw, 4.6rem);
+  font-size: 3.6rem;
 }
 
 .debrief-grid {
@@ -672,15 +752,50 @@ textarea {
   }
 
   .step-grid,
+  .primer-layout,
   .stakeholder-strip,
   .debrief-grid,
   .mode-selector,
-  .model-board__grid {
+  .model-board__canvas {
     grid-template-columns: 1fr;
+  }
+
+  .model-board__canvas {
+    grid-template-areas: none;
+    min-width: 0;
+  }
+
+  .model-field {
+    grid-area: auto !important;
   }
 
   .interrupt-card {
     grid-template-columns: 1fr;
+  }
+
+  h1 {
+    font-size: 2.7rem;
+  }
+
+  .hero-copy {
+    font-size: 1.08rem;
+  }
+
+  .workspace__topline h1,
+  .debrief-hero h1 {
+    font-size: 2rem;
+  }
+
+  .barrier-list {
+    grid-template-columns: 1fr;
+  }
+
+  .start-row {
+    justify-content: stretch;
+  }
+
+  .start-row .primary-action {
+    width: 100%;
   }
 }
 

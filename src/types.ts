@@ -11,7 +11,6 @@ export type FieldId =
   | "internal_stakeholders"
   | "external_stakeholders"
   | "resources_knowledge"
-  | "tools_processes"
   | "logistical_constraints"
   | "team_governance"
   | "team"

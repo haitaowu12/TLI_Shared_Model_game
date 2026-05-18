@@ -72,8 +72,15 @@ describe("session reducer", () => {
     session = sessionReducer(session, { type: "SELECT_PROJECT_ACTION", actionId: "protect-kpi-boundary" });
     session = sessionReducer(session, { type: "ADVANCE_ROUND" });
 
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-quiet-discipline", fieldId: "internal_stakeholders" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-style-clash", fieldId: "team_governance" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-decision-rights", fieldId: "accountable" });
+    session = sessionReducer(session, { type: "ASSIGN_CARD", cardId: "card-safety-success", fieldId: "success_criteria" });
+    session = sessionReducer(session, { type: "SELECT_PROJECT_ACTION", actionId: "style-aware-reset" });
+    session = sessionReducer(session, { type: "ADVANCE_ROUND" });
+
     expect(session.phase).toBe("debrief");
-    expect(session.debrief?.roundOutcomes).toHaveLength(3);
+    expect(session.debrief?.roundOutcomes).toHaveLength(4);
     expect(session.debrief?.finalOutcome.title).toMatch(/Aligned Recovery|Sustainable Delivery/);
   });
 });

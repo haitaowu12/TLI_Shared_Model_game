@@ -79,7 +79,7 @@ describe("scoring", () => {
 
     expect(debrief.rubric.filter((result) => result.passed).length).toBeGreaterThanOrEqual(5);
     expect(debrief.allTags).toContain("vision");
-    expect(debrief.stakeholderScores.length).toBe(3);
+    expect(debrief.stakeholderScores.length).toBe(scenario.stakeholders.length);
   });
 
   it("rewards correctly placing evidence into focused Shared Model fields", () => {

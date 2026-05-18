@@ -20,8 +20,10 @@ export function Onboarding({ onComplete }: { onComplete: () => void }) {
         <article className="primer-card">
           <p className="eyebrow">Cohort 9 paper</p>
           <h2>What this model is for</h2>
+          <p>{paper151LearningContext.sourceNote}</p>
           <p className="research-question">{paper151LearningContext.researchQuestion}</p>
           <p>{paper151LearningContext.sharedModelPurpose}</p>
+          <p>{paper151LearningContext.safetyConnection}</p>
           <p>{paper151LearningContext.gamePurpose}</p>
           <h3>Pressure patterns the model counters</h3>
           <ul className="barrier-list">

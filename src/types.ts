@@ -82,6 +82,7 @@ export interface ProjectAction {
 export interface ProjectRound {
   id: string;
   title: string;
+  learningGoal: string;
   pressure: string;
   prompt: string;
   stakeholderId: string;

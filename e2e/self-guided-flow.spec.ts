@@ -12,6 +12,8 @@ test("self-guided project run resolves through board assignments", async ({ page
   });
 
   await page.goto("/");
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
   await page.getByRole("button", { name: "Start guided scenario" }).click();
   await page.getByRole("button", { name: "Start project run" }).click();
 
@@ -34,10 +36,29 @@ test("self-guided project run resolves through board assignments", async ({ page
   await placeCard(page, /Scope boundary/, /Scope:/);
   await placeCard(page, /Reusable learning/, /Resources\/Knowledge Management:/);
   await page.getByRole("button", { name: /Protect KPI and scope boundary/ }).click();
+
+  await page.getByRole("button", { name: "Advance project" }).click();
+
+  await placeCard(page, /Quiet discipline/, /Internal Stakeholder Context:/);
+  await placeCard(page, /Style clash/, /Team Governance:/);
+  await placeCard(page, /Decision rights unclear/, /Accountable:/);
+  await placeCard(page, /Safety success signal/, /Success Criteria:/);
+  await page.getByRole("button", { name: /Run style-aware safety reset/ }).click();
   await page.getByRole("button", { name: "Resolve project outcome" }).click();
 
   await expect(page.getByRole("heading", { name: /Aligned Recovery|Sustainable Delivery/ })).toBeVisible();
   await expect(page.getByText(/Round 1: Defect Drift/).first()).toBeVisible();
+  await expect(page.getByText(/Round 4: Psychological Safety Fault Line/).first()).toBeVisible();
+  await expect(page.getByText("Final evidence map")).toBeVisible();
   await expect(page.getByLabel("What will you apply to a real project this week?")).toBeVisible();
+  const textState = await page.evaluate(() => {
+    const gameWindow = window as typeof window & { render_game_to_text?: () => string };
+    return JSON.parse(gameWindow.render_game_to_text?.() ?? "{}");
+  });
+  expect(textState).toMatchObject({
+    phase: "debrief",
+    round: { total: 4 },
+  });
+  expect(["Aligned Recovery", "Sustainable Delivery"]).toContain(textState.debrief.outcome);
   expect(consoleErrors).toEqual([]);
 });

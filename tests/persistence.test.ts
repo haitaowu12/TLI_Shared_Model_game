@@ -16,12 +16,13 @@ function memoryStorage(seed: Record<string, string> = {}): StorageLike {
 }
 
 describe("persistence", () => {
-  it("saves and loads v2 session state", () => {
+  it("saves and loads v3 session state", () => {
     const storage = memoryStorage();
     const session = createInitialSession("briefing");
 
     expect(saveSession(session, storage)).toBe(true);
     expect(loadSession(storage)?.phase).toBe("briefing");
+    expect(loadSession(storage)?.version).toBe(3);
   });
 
   it("starts at briefing when legacy training completion exists", () => {

@@ -1,24 +1,6 @@
 import { fieldLabel, sharedModelFields } from "../content/sharedModel";
 import type { FieldId } from "../types";
-
-const fieldAreas: Record<FieldId, string> = {
-  internal_stakeholders: "internal",
-  external_stakeholders: "external",
-  vision: "vision",
-  scope: "scope",
-  project_manager: "project",
-  rationale: "rationale",
-  as_is_state: "asis",
-  strategy: "strategy",
-  team_governance: "governance",
-  kpis: "kpis",
-  responsible: "responsible",
-  accountable: "accountable",
-  success_criteria: "success",
-  team: "team",
-  logistical_constraints: "constraints",
-  resources_knowledge: "resources",
-};
+import { fieldAreas, modelFieldTone } from "./modelLayout";
 
 export function SharedModelBoard({
   selectedTags,
@@ -44,8 +26,7 @@ export function SharedModelBoard({
           const className = [
             "model-field",
             `model-field--${field.group}`,
-            ["internal_stakeholders", "external_stakeholders"].includes(field.id) ? "model-field--side" : "",
-            ["vision", "scope", "logistical_constraints", "resources_knowledge"].includes(field.id) ? "model-field--band" : "",
+            ...modelFieldTone(field.id),
             selected.has(field.id) ? "model-field--selected" : "",
             required.has(field.id) ? "model-field--required" : "",
             missed.has(field.id) ? "model-field--missed" : "",

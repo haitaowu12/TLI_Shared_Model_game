@@ -58,9 +58,6 @@ textarea:focus-visible {
 }
 
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -191,6 +188,12 @@ h2 {
   color: #13100a;
   font-weight: 800;
   box-shadow: 0 16px 34px rgba(245, 184, 65, 0.24);
+}
+
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
 }
 
 .primary-action--compact {
@@ -378,6 +381,164 @@ h2 {
   overflow: auto;
 }
 
+.run-screen {
+  width: min(1500px, 100%);
+  margin: 0 auto;
+  padding: clamp(18px, 3vw, 42px);
+}
+
+.run-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.run-header > div,
+.card-tray,
+.decision-panel,
+.outcome-preview {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(22, 31, 45, 0.94), rgba(17, 23, 34, 0.96));
+  box-shadow: var(--shadow);
+}
+
+.run-header > div {
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.run-header h1 {
+  margin: 0 0 12px;
+  font-size: 3rem;
+}
+
+.run-stage {
+  display: grid;
+  grid-template-areas:
+    "board board"
+    "cards decision";
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 18px;
+  align-items: start;
+}
+
+.model-board--playfield {
+  grid-area: board;
+}
+
+.card-tray {
+  grid-area: cards;
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.card-tray h2,
+.decision-panel h2,
+.outcome-preview h2 {
+  margin-bottom: 6px;
+}
+
+.card-tray strong,
+.decision-panel strong {
+  color: #d8e1ee;
+}
+
+.evidence-stack {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.evidence-card,
+.action-option,
+.field-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  text-align: left;
+}
+
+.evidence-card {
+  display: grid;
+  gap: 8px;
+  min-height: 170px;
+  padding: 12px;
+}
+
+.evidence-card span,
+.evidence-card small {
+  color: var(--amber);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.evidence-card p,
+.action-option span,
+.outcome-preview p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.evidence-card--selected,
+.action-option--selected {
+  border-color: rgba(49, 208, 170, 0.76);
+  background: rgba(49, 208, 170, 0.12);
+}
+
+.evidence-card--placed {
+  border-color: rgba(114, 167, 255, 0.5);
+}
+
+.decision-panel {
+  grid-area: decision;
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+}
+
+.focus-list,
+.action-list,
+.field-card-list {
+  display: grid;
+  gap: 8px;
+}
+
+.focus-list {
+  grid-template-columns: 1fr;
+}
+
+.focus-list span {
+  border: 1px solid rgba(245, 184, 65, 0.22);
+  border-radius: 999px;
+  padding: 7px 9px;
+  background: rgba(245, 184, 65, 0.08);
+  color: #f5d99b;
+  font-size: 0.82rem;
+}
+
+.action-option {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.outcome-preview {
+  padding: 14px;
+  box-shadow: none;
+}
+
+.run-advance {
+  width: 100%;
+  justify-content: center;
+}
+
 .workspace__topline,
 .section-heading,
 .meter__label,
@@ -546,6 +707,14 @@ textarea {
   background: rgba(255, 255, 255, 0.035);
 }
 
+.model-board--playfield .model-board__canvas {
+  min-width: 900px;
+}
+
+.model-board__canvas--play .model-field {
+  min-height: 132px;
+}
+
 .model-field h3 {
   margin: 6px 0;
   font-size: 0.92rem;
@@ -580,6 +749,43 @@ textarea {
 .model-field--missed {
   border-color: rgba(242, 106, 122, 0.72);
   background: rgba(242, 106, 122, 0.1);
+}
+
+.model-field--focus {
+  box-shadow: inset 0 0 0 1px rgba(245, 184, 65, 0.3);
+}
+
+.model-field--drop-target {
+  cursor: copy;
+}
+
+.model-field--drop-target:hover {
+  border-color: rgba(49, 208, 170, 0.72);
+  background: rgba(49, 208, 170, 0.1);
+}
+
+.field-card-list {
+  margin-top: 10px;
+}
+
+.field-card {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 8px;
+  font-size: 0.78rem;
+}
+
+.field-card:disabled {
+  cursor: default;
+}
+
+.field-card strong {
+  color: #f5fffc;
+}
+
+.field-card span {
+  color: var(--muted);
 }
 
 .interrupt-panel {
@@ -723,13 +929,22 @@ textarea {
 
 @media (max-width: 1120px) {
   .workspace,
-  .brief-layout {
+  .brief-layout,
+  .run-header {
     grid-template-columns: 1fr;
   }
 
   .workspace__right {
     position: static;
     max-height: none;
+  }
+
+  .run-stage {
+    grid-template-areas:
+      "board"
+      "cards"
+      "decision";
+    grid-template-columns: 1fr;
   }
 
   .step-grid,
@@ -760,9 +975,24 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .evidence-stack {
+    grid-template-columns: 1fr;
+  }
+
   .model-board__canvas {
     grid-template-areas: none;
     min-width: 0;
+  }
+
+  .model-board--playfield .model-board__canvas {
+    min-width: 0;
+  }
+
+  .run-stage {
+    grid-template-areas:
+      "cards"
+      "board"
+      "decision";
   }
 
   .model-field {
@@ -782,7 +1012,8 @@ textarea {
   }
 
   .workspace__topline h1,
-  .debrief-hero h1 {
+  .debrief-hero h1,
+  .run-header h1 {
     font-size: 2rem;
   }
 

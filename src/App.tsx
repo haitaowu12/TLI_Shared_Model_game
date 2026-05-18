@@ -49,11 +49,11 @@ export function App() {
         <ResponseWorkspace
           session={session}
           scenario={scenario}
-          onModeChange={(mode) => dispatch({ type: "SET_MODE", mode })}
-          onTextChange={(sectionId, text) => dispatch({ type: "UPDATE_SECTION_TEXT", sectionId, text })}
-          onTagToggle={(sectionId, tag) => dispatch({ type: "TOGGLE_TAG", sectionId, tag })}
-          onAddInterruptTags={(interruptId, sectionId) => dispatch({ type: "ADD_INTERRUPT_TAGS", interruptId, sectionId })}
-          onSubmit={() => dispatch({ type: "SUBMIT_RESPONSE" })}
+          onSelectCard={(cardId) => dispatch({ type: "SELECT_CARD", cardId })}
+          onAssignCard={(cardId, fieldId) => dispatch({ type: "ASSIGN_CARD", cardId, fieldId })}
+          onUnassignCard={(cardId) => dispatch({ type: "UNASSIGN_CARD", cardId })}
+          onSelectAction={(actionId) => dispatch({ type: "SELECT_PROJECT_ACTION", actionId })}
+          onAdvanceRound={() => dispatch({ type: "ADVANCE_ROUND" })}
         />
       )}
 

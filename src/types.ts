@@ -60,6 +60,62 @@ export interface Scenario {
   successCriteria: string[];
 }
 
+export interface ModelContentCard {
+  id: string;
+  roundId: string;
+  title: string;
+  body: string;
+  source: string;
+  idealFields: FieldId[];
+  stakeholderId?: string;
+}
+
+export interface ProjectAction {
+  id: string;
+  label: string;
+  description: string;
+  supports: FieldId[];
+  risks: FieldId[];
+  meterDeltas: Partial<Meters>;
+}
+
+export interface ProjectRound {
+  id: string;
+  title: string;
+  pressure: string;
+  prompt: string;
+  stakeholderId: string;
+  focusFields: FieldId[];
+  cards: ModelContentCard[];
+  actions: ProjectAction[];
+}
+
+export interface BoardAssignment {
+  cardId: string;
+  fieldId: FieldId;
+  roundId: string;
+}
+
+export interface RoundOutcome {
+  roundId: string;
+  title: string;
+  actionId: string;
+  actionLabel: string;
+  upheldFields: FieldId[];
+  missingFields: FieldId[];
+  misplacedCardIds: string[];
+  unplacedCardIds: string[];
+  meterDeltas: Meters;
+  summary: string;
+  consequence: string;
+}
+
+export interface FinalOutcome {
+  title: string;
+  tone: "strong" | "mixed" | "risk";
+  summary: string;
+}
+
 export type ResponseMode = "tactical_patch" | "strategic_pause" | "model_reframe";
 
 export type ResponseSectionId =
@@ -109,7 +165,7 @@ export interface GameEvent {
 }
 
 export interface RubricResult {
-  id: ResponseSectionId | "interrupts" | "coverage";
+  id: string;
   label: string;
   passed: boolean;
   message: string;
@@ -136,10 +192,12 @@ export interface DebriefReport {
   nextMeters: Meters;
   notes: string[];
   transferAction: string;
+  roundOutcomes: RoundOutcome[];
+  finalOutcome: FinalOutcome;
 }
 
 export interface GameSession {
-  version: 2;
+  version: 3;
   phase: GamePhase;
   scenarioId: string;
   createdAt: string;
@@ -147,6 +205,11 @@ export interface GameSession {
   meters: Meters;
   previousMeters: Meters;
   response: ResponseSubmission;
+  currentRoundIndex: number;
+  boardAssignments: BoardAssignment[];
+  selectedCardId?: string;
+  selectedActionId?: string;
+  roundOutcomes: RoundOutcome[];
   eventLog: GameEvent[];
   debrief: DebriefReport | null;
   autosaveStatus: "idle" | "saved" | "unavailable";

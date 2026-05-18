@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-test("self-guided training flow reaches debrief", async ({ page }) => {
+async function placeCard(page: import("@playwright/test").Page, cardName: RegExp, fieldName: RegExp) {
+  await page.getByRole("button", { name: cardName }).click();
+  await page.getByLabel(fieldName).click();
+}
+
+test("self-guided project run resolves through board assignments", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
@@ -8,33 +13,31 @@ test("self-guided training flow reaches debrief", async ({ page }) => {
 
   await page.goto("/");
   await page.getByRole("button", { name: "Start guided scenario" }).click();
-  await page.getByRole("button", { name: "Start response" }).click();
+  await page.getByRole("button", { name: "Start project run" }).click();
 
-  await page.getByLabel("Purpose Anchor").fill("The vision remains faster rural emergency response without giving up safety, trust, or regulatory confidence.");
-  await page.locator("article").filter({ hasText: "Purpose Anchor" }).getByRole("button", { name: "Vision" }).click();
-  await page.locator("article").filter({ hasText: "Purpose Anchor" }).getByRole("button", { name: "Rationale" }).click();
+  await placeCard(page, /Current system fact/, /As-is State:/);
+  await placeCard(page, /Owner needed/, /Responsible:/);
+  await placeCard(page, /Containment path/, /Strategy:/);
+  await placeCard(page, /Standup drift/, /Team Governance:/);
+  await page.getByRole("button", { name: /Reframe standup around the model/ }).click();
+  await page.getByRole("button", { name: "Advance project" }).click();
 
-  await page.getByLabel("Immediate 48h Action").fill("Morgan owns a 48-hour containment path that protects the core workflow and reports progress daily.");
-  await page.locator("article").filter({ hasText: "Immediate 48h Action" }).getByRole("button", { name: "Strategy" }).click();
-  await page.locator("article").filter({ hasText: "Immediate 48h Action" }).getByRole("button", { name: "Responsible" }).click();
+  await placeCard(page, /Public question/, /Vision:/);
+  await placeCard(page, /Why now/, /Rationale:/);
+  await placeCard(page, /Community impact/, /External Stakeholder Context:/);
+  await placeCard(page, /Success signal/, /Success Criteria:/);
+  await page.getByRole("button", { name: /Publish one model-based story/ }).click();
+  await page.getByRole("button", { name: "Advance project" }).click();
 
-  await page.getByLabel("Boundary Statement").fill("Containment is in scope, but permanent redesign waits for evidence, budget review, and regulatory alignment.");
-  await page.locator("article").filter({ hasText: "Boundary Statement" }).getByRole("button", { name: "Scope" }).click();
-  await page.locator("article").filter({ hasText: "Boundary Statement" }).getByRole("button", { name: "Logistical Constraints" }).click();
+  await placeCard(page, /Protected KPI/, /Key Performance Indicators:/);
+  await placeCard(page, /Budget cap/, /Logistical Constraints:/);
+  await placeCard(page, /Scope boundary/, /Scope:/);
+  await placeCard(page, /Reusable learning/, /Resources\/Knowledge Management:/);
+  await page.getByRole("button", { name: /Protect KPI and scope boundary/ }).click();
+  await page.getByRole("button", { name: "Resolve project outcome" }).click();
 
-  await page.getByLabel("Lifecycle Impact").fill("The team protects median response time, demo uptime, training load, and current integration stability.");
-  await page.locator("article").filter({ hasText: "Lifecycle Impact" }).getByRole("button", { name: "Key Performance Indicators" }).click();
-
-  await page.getByLabel("Stakeholder Message").fill("Operations, public trust, and finance get one message and one escalation path for model alignment.");
-  await page.locator("article").filter({ hasText: "Stakeholder Message" }).getByRole("button", { name: "Team Governance" }).click();
-  await page.locator("article").filter({ hasText: "Stakeholder Message" }).getByRole("button", { name: "External Stakeholder Context" }).click();
-
-  await page.getByRole("button", { name: "Add anchors" }).first().click();
-  await page.getByRole("button", { name: "Add anchors" }).nth(1).click();
-  await page.getByRole("button", { name: "Add anchors" }).nth(2).click();
-  await page.getByRole("button", { name: "Generate debrief" }).click();
-
-  await expect(page.getByRole("heading", { name: /Model discipline held|Model gaps visible/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Aligned Recovery|Sustainable Delivery/ })).toBeVisible();
+  await expect(page.getByText(/Round 1: Defect Drift/).first()).toBeVisible();
   await expect(page.getByLabel("What will you apply to a real project this week?")).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

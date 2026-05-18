@@ -46,3 +46,9 @@ export const scenarios: Scenario[] = [
 export function activeScenario(): Scenario {
   return scenarios[0];
 }
+
+export function scenarioById(id: string): Scenario {
+  const scenario = scenarios.find((candidate) => candidate.id === id);
+  if (!scenario) throw new Error(`Unknown scenario: ${id}`);
+  return scenario;
+}

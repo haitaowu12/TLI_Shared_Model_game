@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { activeScenario } from "../src/content/scenarios";
+import { projectRounds } from "../src/content/projectRun";
 import { stakeholderById } from "../src/content/stakeholders";
 import {
   applyDeltas,
   buildDebriefReport,
   createEmptySubmission,
   defaultMeters,
+  evaluateRound,
   validateInterrupts,
   validateSubmission,
 } from "../src/domain/scoring";
@@ -78,5 +80,32 @@ describe("scoring", () => {
     expect(debrief.rubric.filter((result) => result.passed).length).toBeGreaterThanOrEqual(5);
     expect(debrief.allTags).toContain("vision");
     expect(debrief.stakeholderScores.length).toBe(3);
+  });
+
+  it("rewards correctly placing evidence into focused Shared Model fields", () => {
+    const round = projectRounds[0];
+    const outcome = evaluateRound(
+      round,
+      [
+        { roundId: round.id, cardId: "card-legacy-interface", fieldId: "as_is_state" },
+        { roundId: round.id, cardId: "card-owner-needed", fieldId: "responsible" },
+        { roundId: round.id, cardId: "card-containment-path", fieldId: "strategy" },
+        { roundId: round.id, cardId: "card-standup-drift", fieldId: "team_governance" },
+      ],
+      "reframe-standup",
+    );
+
+    expect(outcome.missingFields).toEqual([]);
+    expect(outcome.meterDeltas.sharedModelStability).toBeGreaterThan(0);
+    expect(outcome.consequence).toContain("Project confidence improved");
+  });
+
+  it("surfaces missing board anchors as project risk", () => {
+    const round = projectRounds[2];
+    const outcome = evaluateRound(round, [], "cut-visible-cost");
+
+    expect(outcome.missingFields).toContain("kpis");
+    expect(outcome.meterDeltas.sharedModelStability).toBeLessThan(0);
+    expect(outcome.consequence).toContain("missing model anchors");
   });
 });

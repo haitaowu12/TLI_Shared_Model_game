@@ -8,8 +8,8 @@ export const onboardingSteps = [
     body: "A tactical patch buys time. A strategic pause slows drift. A model reframe rebuilds shared understanding.",
   },
   {
-    title: "Tag what your words rely on",
-    body: "Tags make the mental model inspectable. If a response cannot be tied to fields, it is probably still implicit.",
+    title: "Place evidence into the model",
+    body: "Cards become useful only when you decide which Shared Model field they clarify, protect, or pressure.",
   },
   {
     title: "Transfer the lesson",

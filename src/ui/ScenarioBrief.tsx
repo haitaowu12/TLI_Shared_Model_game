@@ -11,7 +11,7 @@ export function ScenarioBrief({ scenario, onStart }: { scenario: Scenario; onSta
           <p>{scenario.setup}</p>
           <p className="context-copy">{scenario.context}</p>
           <button className="primary-action" type="button" onClick={onStart}>
-            Start response
+            Start project run
           </button>
         </article>
 

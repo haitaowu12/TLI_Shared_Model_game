@@ -8,6 +8,20 @@ import { Onboarding } from "./ui/Onboarding";
 import { ResponseWorkspace } from "./ui/ResponseWorkspace";
 import { ScenarioBrief } from "./ui/ScenarioBrief";
 
+const AUTHOR_URL = "https://haitaowu12.github.io/tony-wu-home/";
+
+function AuthorLink({ variant = "compact" }: { variant?: "compact" | "footer" }) {
+  return (
+    <a
+      className={`author-link author-link--${variant}`}
+      href={AUTHOR_URL}
+      aria-label="Know the author: Tony Wu, systems engineer and builder of this project"
+    >
+      {variant === "footer" ? "Built by Tony Wu" : "TW · About"}
+    </a>
+  );
+}
+
 declare global {
   interface Window {
     render_game_to_text?: () => string;
@@ -74,6 +88,7 @@ export function App() {
         </div>
         <nav aria-label="Session status">
           <span>{saveState}</span>
+          <AuthorLink />
           <button type="button" onClick={reset}>
             Reset
           </button>

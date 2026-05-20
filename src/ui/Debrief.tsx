@@ -6,6 +6,8 @@ import { MeterStack } from "../rendering/MeterStack";
 import { SharedModelPlayfield } from "../rendering/SharedModelPlayfield";
 import type { GameSession } from "../types";
 
+const AUTHOR_URL = "https://haitaowu12.github.io/tony-wu-home/";
+
 export function Debrief({
   session,
   onTransferActionChange,
@@ -155,6 +157,16 @@ export function Debrief({
           </article>
         </aside>
       </section>
+
+      <footer className="debrief-author">
+        <span>Built by Tony Wu.</span>
+        <a
+          href={AUTHOR_URL}
+          aria-label="Know the author: Tony Wu, systems engineer and builder of this project"
+        >
+          Know the author
+        </a>
+      </footer>
     </main>
   );
 }

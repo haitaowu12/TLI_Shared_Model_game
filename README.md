@@ -2,6 +2,8 @@
 
 Production rebuild for the INCOSE TLI Shared Model training game.
 
+Built by [Tony Wu](https://haitaowu12.github.io/tony-wu-home/) - systems engineering tools, assurance workflows, and learning simulations.
+
 This version is a React + Vite + TypeScript app focused on self-guided practice: inspect a pressure scenario, place evidence directly into Shared Model fields, choose project actions, watch project meters change across rounds, and generate a debrief with transfer action.
 
 The Shared Model content is grounded in `Paper-151.pdf`, especially the page 18 overview canvas. The game now teaches the canvas before play: Vision and Scope frame the work; stakeholder context bounds the sides; Rationale, As-is State, Strategy, Team Governance, and KPIs carry the working core; roles and Success Criteria clarify accountability; Logistical Constraints and Resources/Knowledge Management ground execution.

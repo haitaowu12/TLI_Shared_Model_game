@@ -1,0 +1,26 @@
+{
+  "source_commit": "6088b3c2abcdc8b6854d95afaf9044aeb7e072c1",
+  "hosting": "GitHub Pages branch publishing",
+  "files": [
+    {
+      "path": ".nojekyll",
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "assets/index-BMZ0Q8x5.css",
+      "bytes": 15341,
+      "sha256": "e3c00fd58faa3403d2955a8e6c729c828c653b8192d9a2725bb80a4dc2e80955"
+    },
+    {
+      "path": "assets/index-BZ1hZQJn.js",
+      "bytes": 243115,
+      "sha256": "10cef0b32fb7282ec2ce3cca00f93e01b777bc9c7f7ff2144bd4d3e0b1eb307e"
+    },
+    {
+      "path": "index.html",
+      "bytes": 1028,
+      "sha256": "ed081fdbcfb5eed44050a48d940096d3a2a4b9a0e6b5bd97e7d3d8a96ff0ec2e"
+    }
+  ]
+}

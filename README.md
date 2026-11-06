@@ -41,3 +41,13 @@ npm run test:e2e
 ## Design Direction
 
 Godot is intentionally out of scope. The learning surface is the Shared Model canvas, evidence placement, project progression, debrief, accessibility, workshop transfer, and static web deployment. Phaser or PixiJS can be added later as renderer layers if playtests show that a richer board animation improves transfer.
+
+## Firebase Hosting
+
+[Open the published project](https://shared-model-game.web.app/). Firebase Hosting is the primary destination for future releases. Run `npm test` and the existing browser checks, then `npm run build -- --base=./`; publish `dist/`.
+
+```sh
+firebase deploy --only hosting --project tony-wu-projects
+```
+
+The repository configuration selects the site and public output directory. Hosting uses the no-cost Spark plan; source pushes do not deploy automatically. Existing hosts remain available.

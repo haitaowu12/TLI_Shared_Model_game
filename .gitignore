@@ -11,3 +11,5 @@ node_modules/
 output/playwright/
 test-results/
 playwright-report/
+.firebase/
+gha-creds-*.json
